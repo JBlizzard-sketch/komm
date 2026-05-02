@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useParams, useLocation } from "wouter";
 import {
   ArrowLeft, CheckCircle2, XCircle, Clock, Send as SendIcon,
-  Users, Copy, FlaskConical, Phone, Mail,
+  Users, Copy, FlaskConical, Phone, Mail, CalendarOff,
 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -59,9 +59,26 @@ export default function CampaignDetail() {
   const [testPhone, setTestPhone] = useState("");
   const [testEmail, setTestEmail] = useState("");
 
+  const [cancelling, setCancelling] = useState(false);
   const sendCampaign = useSendCampaign();
   const testCampaign = useTestCampaign();
   const duplicateCampaign = useDuplicateCampaign();
+
+  const handleCancelSchedule = async () => {
+    setCancelling(true);
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}/cancel`, { method: "POST" });
+      if (!res.ok) throw new Error();
+      qc.invalidateQueries({ queryKey: getGetCampaignQueryKey(campaignId) });
+      qc.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
+      qc.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() });
+      toast({ title: "Campaign unscheduled — moved back to Draft" });
+    } catch {
+      toast({ title: "Failed to cancel schedule", variant: "destructive" });
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   const { data: campaign, isLoading } = useGetCampaign(campaignId, {
     query: { enabled: !!campaignId, queryKey: getGetCampaignQueryKey(campaignId) },
@@ -176,6 +193,19 @@ export default function CampaignDetail() {
             <Copy className="w-4 h-4" />
             Duplicate
           </Button>
+          {isScheduled && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 text-amber-700 border-amber-300 hover:bg-amber-50"
+              onClick={handleCancelSchedule}
+              disabled={cancelling}
+              data-testid="button-cancel-schedule"
+            >
+              <CalendarOff className="w-4 h-4" />
+              Cancel Schedule
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"

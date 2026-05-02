@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link } from "wouter";
 import {
   Plus, Send, Clock, CheckCircle2, XCircle, FileText,
-  MoreHorizontal, Trash2, ChevronLeft, ChevronRight,
+  MoreHorizontal, Trash2, ChevronLeft, ChevronRight, Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -159,6 +159,7 @@ function CampaignRow({ campaign }: { campaign: Campaign }) {
 export default function Campaigns() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [channelFilter, setChannelFilter] = useState<string>("all");
+  const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
 
   const queryParams = {
@@ -171,6 +172,13 @@ export default function Campaigns() {
   const { data, isLoading } = useListCampaigns(queryParams, {
     query: { queryKey: getListCampaignsQueryKey(queryParams) },
   });
+
+  const allRows = data?.data ?? [];
+  const filtered = useMemo(() => {
+    if (!search.trim()) return allRows;
+    const q = search.toLowerCase();
+    return allRows.filter((c) => c.name.toLowerCase().includes(q) || c.body.toLowerCase().includes(q));
+  }, [allRows, search]);
 
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -192,8 +200,18 @@ export default function Campaigns() {
         </Link>
       </div>
 
-      {/* Filters */}
-      <div className="flex gap-3 mb-4">
+      {/* Filters + search */}
+      <div className="flex gap-3 mb-4 flex-wrap">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search campaigns…"
+            className="h-8 pl-8 pr-3 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring w-52"
+            data-testid="search-campaigns"
+          />
+        </div>
         <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); resetPage(); }}>
           <SelectTrigger className="w-36 h-8 text-sm" data-testid="filter-status">
             <SelectValue placeholder="All statuses" />
@@ -255,9 +273,13 @@ export default function Campaigns() {
                 </Button>
               </Link>
             </div>
+          ) : filtered.length === 0 ? (
+            <div className="py-10 text-center text-sm text-muted-foreground">
+              No campaigns match your search.
+            </div>
           ) : (
             <div className="divide-y divide-border">
-              {data.data.map((campaign) => (
+              {filtered.map((campaign) => (
                 <CampaignRow key={campaign.id} campaign={campaign} />
               ))}
             </div>

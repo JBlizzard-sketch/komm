@@ -137,6 +137,21 @@ router.delete("/campaigns/:id", async (req, res) => {
   return res.status(204).send();
 });
 
+router.post("/campaigns/:id/cancel", async (req, res) => {
+  const { id } = DeleteCampaignParams.parse(req.params);
+  const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, id));
+  if (!campaign) return res.status(404).json({ error: "Not found" });
+  if (campaign.status !== "scheduled") {
+    return res.status(400).json({ error: "Campaign is not scheduled" });
+  }
+  const [updated] = await db
+    .update(campaignsTable)
+    .set({ status: "draft", scheduledAt: null })
+    .where(eq(campaignsTable.id, id))
+    .returning();
+  return res.json(updated);
+});
+
 router.post("/campaigns/:id/send", async (req, res) => {
   const { id } = SendCampaignParams.parse(req.params);
   const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, id));

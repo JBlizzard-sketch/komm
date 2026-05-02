@@ -54,6 +54,7 @@ export default function CampaignNew() {
   const editId = params.get("edit") ? parseInt(params.get("edit")!) : null;
   const fromTemplateId = params.get("templateId") ? parseInt(params.get("templateId")!) : null;
   const fromChannel = (params.get("channel") ?? "") as "sms" | "whatsapp" | "email" | "";
+  const fromGroupId = params.get("groupId") ? parseInt(params.get("groupId")!) : null;
 
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -93,6 +94,13 @@ export default function CampaignNew() {
       if (fromChannel) form.setValue("channel", fromChannel);
     }
   }, [fromTemplateId, templates]);
+
+  // Pre-select group from URL param (e.g. ?groupId=4 from "Message Group" button)
+  useEffect(() => {
+    if (!fromGroupId || !groups) return;
+    const g = groups.find((gr) => gr.id === fromGroupId);
+    if (g) form.setValue("groupIds", [fromGroupId]);
+  }, [fromGroupId, groups]);
 
   // Pre-fill form when editing an existing campaign
   useEffect(() => {

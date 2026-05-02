@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Plus, FolderOpen, Trash2, Edit2, Users, ChevronDown, ChevronUp, UserMinus, UserPlus } from "lucide-react";
+import { useLocation } from "wouter";
+import { Plus, FolderOpen, Trash2, Edit2, Users, ChevronDown, ChevronUp, UserMinus, UserPlus, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -170,6 +171,7 @@ export default function Groups() {
   const [showCreate, setShowCreate] = useState(false);
   const [editGroup, setEditGroup] = useState<Group | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [, navigate] = useLocation();
   const qc = useQueryClient();
   const { toast } = useToast();
 
@@ -257,6 +259,14 @@ export default function Groups() {
                       <p className="text-xs text-muted-foreground mt-2">Created {format(new Date(g.createdAt), "d MMM yyyy")}</p>
                     </div>
                     <div className="flex gap-1">
+                      <button
+                        onClick={() => navigate(`/campaigns/new?groupId=${g.id}`)}
+                        title="Send message to this group"
+                        data-testid={`send-group-${g.id}`}
+                        className="w-7 h-7 flex items-center justify-center rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                      </button>
                       <button
                         onClick={() => toggleExpand(g.id)}
                         title={isExpanded ? "Collapse" : "View members"}
