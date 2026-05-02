@@ -65,9 +65,12 @@ interface ContactMessage {
 
 const KNOWN_CSV_COLS = new Set(["name", "full name", "fullname", "contact name", "phone", "phone number", "mobile", "msisdn", "tel", "email", "email address", "channel", "preferred channel"]);
 
-function parseCSV(text: string): ParsedContact[] {
+interface SkippedRow { row: number; reason: string; raw: string }
+interface ParseResult { valid: ParsedContact[]; skipped: SkippedRow[] }
+
+function parseCSV(text: string): ParseResult {
   const lines = text.trim().split(/\r?\n/);
-  if (lines.length < 2) return [];
+  if (lines.length < 2) return { valid: [], skipped: [] };
   const headers = lines[0].toLowerCase().split(",").map((h) => h.trim().replace(/"/g, ""));
   const col = (names: string[]) => { for (const n of names) { const i = headers.indexOf(n); if (i !== -1) return i; } return -1; };
   const nameCol = col(["name", "full name", "fullname", "contact name"]);
@@ -75,15 +78,22 @@ function parseCSV(text: string): ParsedContact[] {
   const emailCol = col(["email", "email address"]);
   const channelCol = col(["channel", "preferred channel"]);
   const extraCols = headers.map((h, i) => ({ key: h, idx: i })).filter(({ key }) => !KNOWN_CSV_COLS.has(key));
-  if (nameCol === -1 || phoneCol === -1) return [];
-  return lines.slice(1)
-    .map((line) => {
-      const cols = line.split(",").map((c) => c.trim().replace(/^"|"$/g, ""));
-      const customFields: Record<string, string> = {};
-      for (const { key, idx } of extraCols) { if (cols[idx]) customFields[key] = cols[idx]; }
-      return { name: cols[nameCol] ?? "", phone: cols[phoneCol] ?? "", email: emailCol !== -1 ? cols[emailCol] || undefined : undefined, channel: channelCol !== -1 && cols[channelCol] ? cols[channelCol].toLowerCase() : "sms", ...(Object.keys(customFields).length > 0 ? { customFields } : {}) };
-    })
-    .filter((c) => c.name && c.phone);
+  if (nameCol === -1 || phoneCol === -1) return { valid: [], skipped: [] };
+  const valid: ParsedContact[] = [];
+  const skipped: SkippedRow[] = [];
+  lines.slice(1).forEach((line, idx) => {
+    if (!line.trim()) return;
+    const cols = line.split(",").map((c) => c.trim().replace(/^"|"$/g, ""));
+    const name = cols[nameCol] ?? "";
+    const phone = cols[phoneCol] ?? "";
+    if (!name && !phone) { skipped.push({ row: idx + 2, reason: "Missing name and phone", raw: line.slice(0, 60) }); return; }
+    if (!name) { skipped.push({ row: idx + 2, reason: "Missing name", raw: line.slice(0, 60) }); return; }
+    if (!phone) { skipped.push({ row: idx + 2, reason: "Missing phone number", raw: line.slice(0, 60) }); return; }
+    const customFields: Record<string, string> = {};
+    for (const { key, idx: cidx } of extraCols) { if (cols[cidx]) customFields[key] = cols[cidx]; }
+    valid.push({ name, phone, email: emailCol !== -1 ? cols[emailCol] || undefined : undefined, channel: channelCol !== -1 && cols[channelCol] ? cols[channelCol].toLowerCase() : "sms", ...(Object.keys(customFields).length > 0 ? { customFields } : {}) });
+  });
+  return { valid, skipped };
 }
 
 function exportContactsCSV(contacts: { name: string; phone: string; email: string | null; channel: string; customFields?: Record<string, unknown> | null }[]) {
@@ -218,20 +228,21 @@ function CSVImportDialog({ open, onClose, groups }: { open: boolean; onClose: ()
   const qc = useQueryClient();
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [parsed, setParsed] = useState<ParsedContact[]>([]);
+  const [parseResult, setParseResult] = useState<ParseResult>({ valid: [], skipped: [] });
   const [fileName, setFileName] = useState("");
   const [targetGroup, setTargetGroup] = useState("none");
   const [result, setResult] = useState<{ imported: number; duplicates: number; errors: number; errorDetails?: string[] } | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [showSkipped, setShowSkipped] = useState(false);
   const importContacts = useImportContacts();
 
-  const handleFile = (file: File) => { setFileName(file.name); setResult(null); const r = new FileReader(); r.onload = (e) => { setParsed(parseCSV(e.target?.result as string)); }; r.readAsText(file); };
+  const handleFile = (file: File) => { setFileName(file.name); setResult(null); setShowSkipped(false); const r = new FileReader(); r.onload = (e) => { setParseResult(parseCSV(e.target?.result as string)); }; r.readAsText(file); };
   const handleDrop = (e: React.DragEvent) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f?.name.endsWith(".csv")) handleFile(f); else toast({ title: "Please drop a CSV file", variant: "destructive" }); };
 
   const handleImport = () => {
-    if (parsed.length === 0) return;
+    if (parseResult.valid.length === 0) return;
     importContacts.mutate(
-      { data: { contacts: parsed.map((c) => ({ name: c.name, phone: c.phone, email: c.email ?? null, channel: (c.channel as "sms" | "whatsapp" | "email") || "sms", customFields: c.customFields ?? null })), groupId: targetGroup !== "none" ? parseInt(targetGroup) : undefined } },
+      { data: { contacts: parseResult.valid.map((c) => ({ name: c.name, phone: c.phone, email: c.email ?? null, channel: (c.channel as "sms" | "whatsapp" | "email") || "sms", customFields: c.customFields ?? null })), groupId: targetGroup !== "none" ? parseInt(targetGroup) : undefined } },
       {
         onSuccess: (res) => { setResult(res); qc.invalidateQueries({ queryKey: getListContactsQueryKey() }); qc.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() }); qc.invalidateQueries({ queryKey: getListGroupsQueryKey() }); },
         onError: () => toast({ title: "Import failed", variant: "destructive" }),
@@ -239,7 +250,8 @@ function CSVImportDialog({ open, onClose, groups }: { open: boolean; onClose: ()
     );
   };
 
-  const handleClose = () => { setParsed([]); setFileName(""); setResult(null); setTargetGroup("none"); onClose(); };
+  const handleClose = () => { setParseResult({ valid: [], skipped: [] }); setFileName(""); setResult(null); setTargetGroup("none"); setShowSkipped(false); onClose(); };
+  const parsed = parseResult.valid;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -250,7 +262,7 @@ function CSVImportDialog({ open, onClose, groups }: { open: boolean; onClose: ()
             <div className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${dragOver ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}
               onDragOver={(e) => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={handleDrop} onClick={() => fileRef.current?.click()}>
               <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-              {fileName ? (<div><p className="text-sm font-medium">{fileName}</p><p className="text-xs text-muted-foreground mt-1">{parsed.length} contacts found</p></div>)
+              {fileName ? (<div><p className="text-sm font-medium">{fileName}</p><p className="text-xs text-muted-foreground mt-1">{parsed.length} contacts ready to import{parseResult.skipped.length > 0 ? `, ${parseResult.skipped.length} rows skipped` : ""}</p></div>)
                 : (<div><p className="text-sm font-medium">Drop CSV file here or click to browse</p><p className="text-xs text-muted-foreground mt-1">Required: <code className="bg-muted px-1 rounded">name</code>, <code className="bg-muted px-1 rounded">phone</code> · Optional: <code className="bg-muted px-1 rounded">email</code>, <code className="bg-muted px-1 rounded">channel</code> · Any extra columns become member data (e.g. <code className="bg-muted px-1 rounded">amount</code>, <code className="bg-muted px-1 rounded">balance</code>)</p></div>)}
               <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
             </div>
@@ -261,6 +273,29 @@ function CSVImportDialog({ open, onClose, groups }: { open: boolean; onClose: ()
                   {parsed.slice(0, 20).map((c, i) => (<div key={i} className="grid grid-cols-3 px-3 py-2 text-sm"><span className="truncate font-medium">{c.name}</span><span className="text-muted-foreground truncate">{c.phone}</span><Badge variant="outline" className={`w-fit text-[10px] capitalize ${CHANNEL_CONFIG[c.channel] ?? ""}`}>{c.channel}</Badge></div>))}
                   {parsed.length > 20 && <div className="px-3 py-2 text-xs text-muted-foreground">…and {parsed.length - 20} more</div>}
                 </div>
+              </div>
+            )}
+            {parseResult.skipped.length > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50">
+                <button
+                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-amber-800"
+                  onClick={() => setShowSkipped((s) => !s)}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    {parseResult.skipped.length} row{parseResult.skipped.length !== 1 ? "s" : ""} skipped (missing required fields)
+                  </span>
+                  <span className="text-amber-600">{showSkipped ? "▲ Hide" : "▼ Show"}</span>
+                </button>
+                {showSkipped && (
+                  <div className="border-t border-amber-200 max-h-28 overflow-y-auto divide-y divide-amber-100">
+                    {parseResult.skipped.map((s) => (
+                      <div key={s.row} className="px-3 py-1.5 text-xs text-amber-800">
+                        <span className="font-medium">Row {s.row}:</span> {s.reason} — <span className="text-amber-600 font-mono">{s.raw}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
             <div>
@@ -279,6 +314,11 @@ function CSVImportDialog({ open, onClose, groups }: { open: boolean; onClose: ()
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-center"><AlertCircle className="w-6 h-6 text-amber-600 mx-auto mb-1" /><p className="text-xl font-bold text-amber-700">{result.duplicates}</p><p className="text-xs text-amber-600">Duplicates</p></div>
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center"><X className="w-6 h-6 text-red-600 mx-auto mb-1" /><p className="text-xl font-bold text-red-700">{result.errors}</p><p className="text-xs text-red-600">Failed</p></div>
             </div>
+            {parseResult.skipped.length > 0 && (
+              <p className="text-xs text-muted-foreground text-center">
+                {parseResult.skipped.length} row{parseResult.skipped.length !== 1 ? "s" : ""} were skipped before import (missing name or phone).
+              </p>
+            )}
             <DialogFooter><Button onClick={handleClose}>Done</Button></DialogFooter>
           </div>
         )}
@@ -293,6 +333,7 @@ export default function Contacts() {
   const [search, setSearch] = useState("");
   const urlOptedOut = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("optedOut") === "1";
   const [groupFilter, setGroupFilter] = useState(urlOptedOut ? "opted-out" : "all");
+  const [channelFilter, setChannelFilter] = useState("all");
   const [page, setPage] = useState(1);
 
   useEffect(() => {
@@ -320,7 +361,7 @@ export default function Contacts() {
     page,
     limit: PAGE_SIZE,
   };
-  const queryKey = [...getListContactsQueryKey(queryParams), isOptedOutFilter ? "opted-out" : "all"] as const;
+  const queryKey = [...getListContactsQueryKey(queryParams), isOptedOutFilter ? "opted-out" : "all", channelFilter] as const;
   const { data, isLoading } = useListContacts(
     queryParams,
     {
@@ -333,6 +374,7 @@ export default function Contacts() {
           qs.set("page", String(queryParams.page));
           qs.set("limit", String(queryParams.limit));
           if (isOptedOutFilter) qs.set("optedOutOnly", "true");
+          if (channelFilter !== "all") qs.set("channel", channelFilter);
           const res = await fetch(`/api/contacts?${qs}`);
           return res.json();
         },
@@ -419,6 +461,7 @@ export default function Contacts() {
 
   const handleSearchChange = (v: string) => { setSearch(v); resetPage(); };
   const handleGroupFilterChange = (v: string) => { setGroupFilter(v); resetPage(); };
+  const handleChannelFilterChange = (v: string) => { setChannelFilter(v); resetPage(); };
 
   const toggleSelect = (id: number) => {
     setSelected((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
@@ -506,6 +549,15 @@ export default function Contacts() {
             <SelectItem value="all">All groups</SelectItem>
             <SelectItem value="opted-out">Opted out only</SelectItem>
             {(groups ?? []).map((g) => (<SelectItem key={g.id} value={String(g.id)}>{g.name} ({g.contactCount})</SelectItem>))}
+          </SelectContent>
+        </Select>
+        <Select value={channelFilter} onValueChange={handleChannelFilterChange}>
+          <SelectTrigger className="w-36 h-8 text-sm" data-testid="select-channel-filter"><SelectValue placeholder="All channels" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All channels</SelectItem>
+            <SelectItem value="sms">SMS</SelectItem>
+            <SelectItem value="whatsapp">WhatsApp</SelectItem>
+            <SelectItem value="email">Email</SelectItem>
           </SelectContent>
         </Select>
       </div>

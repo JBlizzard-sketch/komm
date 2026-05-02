@@ -470,7 +470,9 @@ export default function CampaignNew() {
             <FormItem>
               <FormLabel>Schedule (optional)</FormLabel>
               <FormControl><Input type="datetime-local" data-testid="input-scheduled-at" {...field} /></FormControl>
-              <p className="text-xs text-muted-foreground">Leave blank to save as draft or send immediately.</p>
+              <p className="text-xs text-muted-foreground">
+                Leave blank to save as draft or send immediately. Times are in <span className="font-medium">East Africa Time (EAT, UTC+3)</span>.
+              </p>
             </FormItem>
           )} />
 

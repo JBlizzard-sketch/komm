@@ -48,6 +48,7 @@ router.get("/contacts", async (req, res) => {
   const query = ListContactsQueryParams.parse(req.query);
   const { search, groupId, page, limit } = query;
   const optedOutOnly = req.query["optedOutOnly"] === "true";
+  const channelParam = typeof req.query["channel"] === "string" && req.query["channel"] !== "all" ? req.query["channel"] : undefined;
 
   let conditions: ReturnType<typeof and>[] = [];
   if (search) {
@@ -57,6 +58,9 @@ router.get("/contacts", async (req, res) => {
   }
   if (optedOutOnly) {
     conditions.push(eq(contactsTable.optedOut, true));
+  }
+  if (channelParam) {
+    conditions.push(eq(contactsTable.channel, channelParam as "sms" | "whatsapp" | "email"));
   }
 
   let contactIds: number[] | undefined;
