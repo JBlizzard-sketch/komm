@@ -55,6 +55,49 @@ function estimateCost(channel: string, recipients: number, segments = 1) {
   return `~KES ${total.toFixed(2)}`;
 }
 
+const SAMPLE_VARS: Record<string, string> = {
+  name: "Jane Wambua",
+  amount: "KES 5,000",
+  date: new Date().toLocaleDateString("en-KE", { day: "numeric", month: "long", year: "numeric" }),
+  balance: "KES 12,400",
+  due: new Date(Date.now() + 7 * 86400000).toLocaleDateString("en-KE", { day: "numeric", month: "long" }),
+};
+
+function applyVars(text: string) {
+  return text.replace(/\{\{(\w+)\}\}/g, (_, key) => SAMPLE_VARS[key] ?? `{{${key}}}`);
+}
+
+function MessagePreview({ channel, body }: { channel: string; body: string }) {
+  const preview = applyVars(body);
+  if (channel === "email") {
+    return (
+      <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+        <p className="font-medium text-foreground mb-1.5">Preview (sample values)</p>
+        <div className="bg-white border rounded p-3 text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+          {preview}
+        </div>
+      </div>
+    );
+  }
+  const isWhatsApp = channel === "whatsapp";
+  return (
+    <div className="rounded-lg border border-border bg-muted/30 p-3">
+      <p className="text-xs font-medium text-foreground mb-2">Preview (sample values)</p>
+      <div className="flex justify-end">
+        <div className={`max-w-xs rounded-2xl rounded-tr-sm px-3 py-2 text-sm whitespace-pre-wrap leading-relaxed shadow-sm ${isWhatsApp ? "bg-[#dcf8c6] text-gray-900" : "bg-primary text-primary-foreground"}`}>
+          {preview}
+          <div className="flex items-center justify-end gap-1 mt-1">
+            <span className={`text-[10px] ${isWhatsApp ? "text-gray-500" : "text-primary-foreground/60"}`}>
+              {new Date().toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" })}
+            </span>
+            {isWhatsApp && <span className="text-[10px] text-blue-500">✓✓</span>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const CHANNELS = [
   { value: "sms", label: "SMS", icon: MessageSquare, desc: "Via Africa's Talking — best Kenyan delivery" },
   { value: "whatsapp", label: "WhatsApp", icon: MessageSquare, desc: "Pre-approved templates — Cloud API" },
@@ -310,6 +353,10 @@ export default function CampaignNew() {
               )}
             </FormItem>
           )} />
+
+          {body.length > 0 && (
+            <MessagePreview channel={channel} body={body} />
+          )}
 
           <div>
             <Label className="text-sm font-medium">Send To (Groups)</Label>
