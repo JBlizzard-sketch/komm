@@ -14,6 +14,7 @@ import Templates from "@/pages/Templates";
 import Inbox from "@/pages/Inbox";
 import NotFound from "@/pages/not-found";
 import Settings from "@/pages/Settings";
+import Reports from "@/pages/Reports";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -37,6 +38,7 @@ function Router() {
         <Route path="/groups" component={Groups} />
         <Route path="/templates" component={Templates} />
         <Route path="/inbox" component={Inbox} />
+        <Route path="/reports" component={Reports} />
         <Route path="/settings" component={Settings} />
         <Route component={NotFound} />
       </Switch>

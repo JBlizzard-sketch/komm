@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useParams, useLocation } from "wouter";
 import {
   ArrowLeft, CheckCircle2, XCircle, Clock, Send as SendIcon,
-  Users, Copy, FlaskConical, Phone, Mail, CalendarOff,
+  Users, Copy, FlaskConical, Phone, Mail, CalendarOff, Edit2,
 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -182,6 +182,18 @@ export default function CampaignDetail() {
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {(isDraft || isScheduled) && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => navigate(`/campaigns/new?edit=${campaignId}`)}
+              data-testid="button-edit-campaign"
+            >
+              <Edit2 className="w-4 h-4" />
+              Edit
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
