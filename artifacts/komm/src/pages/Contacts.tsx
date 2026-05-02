@@ -481,6 +481,40 @@ export default function Contacts() {
     onError: () => toast({ title: "Failed to update opt-out status", variant: "destructive" }),
   });
 
+  const bulkOptOut = useMutation({
+    mutationFn: async (contactIds: number[]) => {
+      const res = await fetch("/api/contacts/bulk-opt-out", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contactIds }),
+      });
+      if (!res.ok) throw new Error();
+      return res.json() as Promise<{ updated: number }>;
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: getListContactsQueryKey() });
+      toast({ title: `${data.updated} contact${data.updated !== 1 ? "s" : ""} opted out` });
+      setSelected(new Set());
+    },
+    onError: () => toast({ title: "Bulk opt-out failed", variant: "destructive" }),
+  });
+
+  const bulkOptIn = useMutation({
+    mutationFn: async (contactIds: number[]) => {
+      const res = await fetch("/api/contacts/bulk-opt-in", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contactIds }),
+      });
+      if (!res.ok) throw new Error();
+      return res.json() as Promise<{ updated: number }>;
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: getListContactsQueryKey() });
+      toast({ title: `${data.updated} contact${data.updated !== 1 ? "s" : ""} re-subscribed` });
+      setSelected(new Set());
+    },
+    onError: () => toast({ title: "Bulk opt-in failed", variant: "destructive" }),
+  });
+
   const openAdd = () => { setEditContact(null); setShowContactForm(true); };
   const openEdit = (c: Contact) => { setEditContact(c); setShowContactForm(true); };
   const closeForm = () => { setShowContactForm(false); setEditContact(null); };
@@ -598,16 +632,30 @@ export default function Contacts() {
       </div>
 
       {someSelected && (
-        <div className="flex items-center gap-3 mb-3 px-4 py-2.5 bg-primary/5 border border-primary/20 rounded-lg">
+        <div className="flex items-center gap-2 mb-3 px-4 py-2.5 bg-primary/5 border border-primary/20 rounded-lg flex-wrap">
           <span className="text-sm font-medium text-primary">{selected.size} selected</span>
           <div className="flex-1" />
-          <Button variant="outline" size="sm" className="gap-2 h-7 text-xs" onClick={() => setShowBulkGroup(true)}>
+          <Button variant="outline" size="sm" className="gap-1.5 h-7 text-xs" onClick={() => setShowBulkGroup(true)}>
             <UserPlus className="w-3.5 h-3.5" />Add to Group
           </Button>
-          <Button variant="outline" size="sm" className="gap-2 h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10" onClick={handleBulkDelete} disabled={bulkDelete.isPending}>
+          <Button
+            variant="outline" size="sm" className="gap-1.5 h-7 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+            onClick={() => bulkOptOut.mutate(Array.from(selected))}
+            disabled={bulkOptOut.isPending}
+          >
+            <BellOff className="w-3.5 h-3.5" />{bulkOptOut.isPending ? "Opting out…" : "Opt Out"}
+          </Button>
+          <Button
+            variant="outline" size="sm" className="gap-1.5 h-7 text-xs text-green-700 hover:text-green-800 hover:bg-green-50 border-green-200"
+            onClick={() => bulkOptIn.mutate(Array.from(selected))}
+            disabled={bulkOptIn.isPending}
+          >
+            <Bell className="w-3.5 h-3.5" />{bulkOptIn.isPending ? "Re-subscribing…" : "Re-subscribe"}
+          </Button>
+          <Button variant="outline" size="sm" className="gap-1.5 h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10" onClick={handleBulkDelete} disabled={bulkDelete.isPending}>
             <Trash2 className="w-3.5 h-3.5" />{bulkDelete.isPending ? "Deleting…" : "Delete"}
           </Button>
-          <button onClick={clearSelected} className="text-muted-foreground hover:text-foreground">
+          <button onClick={clearSelected} className="text-muted-foreground hover:text-foreground ml-1">
             <X className="w-4 h-4" />
           </button>
         </div>

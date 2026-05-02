@@ -1,11 +1,15 @@
 import { Link } from "wouter";
 import {
   Users, Send, TrendingUp, MessageSquare, CalendarClock, Inbox, Plus, Clock, ArrowRight, BellOff,
+  Zap, CheckCircle2, XCircle,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { useState } from "react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
@@ -79,6 +83,96 @@ const ACTIVITY_TYPE_COLOR: Record<string, string> = {
   contact_imported: "bg-blue-100 text-blue-800",
   reply_received: "bg-purple-100 text-purple-800",
 };
+
+type QuickSendResult = { success: boolean; simulated: boolean; messageId: string | null; error: string | null };
+
+function QuickSendWidget() {
+  const [channel, setChannel] = useState<"sms" | "whatsapp" | "email">("sms");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [body, setBody] = useState("");
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState<QuickSendResult | null>(null);
+
+  const handleSend = async () => {
+    if (!body.trim() || (!phone.trim() && !email.trim())) return;
+    setSending(true);
+    setResult(null);
+    try {
+      const res = await fetch("/api/messages/quick-send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channel, phone: phone || undefined, email: email || undefined, body }),
+      });
+      const data: QuickSendResult = await res.json();
+      setResult(data);
+      if (data.success) { setPhone(""); setEmail(""); setBody(""); }
+    } catch {
+      setResult({ success: false, simulated: false, messageId: null, error: "Network error" });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <Card className="mb-4">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+          <Zap className="w-3.5 h-3.5 text-amber-500" />
+          Quick Send
+          <span className="text-xs font-normal text-muted-foreground ml-1">Send a one-off message to any number</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+          <div>
+            <p className="text-xs font-medium mb-1.5">Channel</p>
+            <div className="flex rounded-md border overflow-hidden">
+              {(["sms", "whatsapp", "email"] as const).map((ch) => (
+                <button key={ch} onClick={() => setChannel(ch)}
+                  className={`flex-1 py-1.5 text-xs font-medium capitalize transition-colors ${channel === ch ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted text-muted-foreground"}`}>
+                  {ch === "whatsapp" ? "WA" : ch.charAt(0).toUpperCase() + ch.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-medium mb-1.5">{channel === "email" ? "Email address" : "Phone number"}</p>
+            {channel === "email" ? (
+              <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="member@example.com" className="h-8 text-sm" />
+            ) : (
+              <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+254712345678" className="h-8 text-sm" />
+            )}
+          </div>
+          <div className="sm:col-span-1">
+            <p className="text-xs font-medium mb-1.5">Message</p>
+            <Textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Type your message…" rows={1}
+              className="text-sm resize-none min-h-[32px] py-1.5" />
+          </div>
+          <div>
+            <Button onClick={handleSend} disabled={sending || !body.trim() || (!phone.trim() && !email.trim())}
+              className="w-full gap-2 h-8" size="sm">
+              <Send className="w-3.5 h-3.5" />
+              {sending ? "Sending…" : "Send"}
+            </Button>
+          </div>
+        </div>
+        {result && (
+          <div className={`mt-3 flex items-center gap-2 text-xs p-2.5 rounded-lg border ${result.success ? "bg-green-50 border-green-200 text-green-800" : "bg-red-50 border-red-200 text-red-800"}`}>
+            {result.success
+              ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+              : <XCircle className="w-3.5 h-3.5 shrink-0" />}
+            {result.success
+              ? result.simulated
+                ? "Message simulated successfully (no live provider configured)."
+                : `Message sent via live provider.${result.messageId ? ` ID: ${result.messageId}` : ""}`
+              : `Failed: ${result.error ?? "Unknown error"}`}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function Dashboard() {
   const { data: stats, isLoading: statsLoading } = useGetDashboardStats({
@@ -235,6 +329,9 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Quick Send */}
+      <QuickSendWidget />
 
       {/* Bottom row: Upcoming + Recent Activity */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">

@@ -19,6 +19,22 @@ import {
 
 const router = Router();
 
+router.post("/messages/quick-send", async (req, res) => {
+  const { phone, email, channel, body } = req.body as {
+    phone?: string; email?: string; channel?: string; body?: string;
+  };
+  if (!channel || !body || (!phone && !email)) {
+    return res.status(400).json({ error: "channel, body, and phone (or email) are required" });
+  }
+  const result = await sendMessage(channel, phone ?? null, email ?? null, body);
+  return res.json({
+    success: result.success,
+    simulated: result.simulated ?? false,
+    messageId: result.messageId ?? null,
+    error: result.error ?? null,
+  });
+});
+
 router.get("/campaigns", async (req, res) => {
   const query = ListCampaignsQueryParams.parse(req.query);
   const { status, channel, page, limit } = query;

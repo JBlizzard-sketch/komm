@@ -273,6 +273,20 @@ router.post("/contacts/:id/opt-in", async (req, res) => {
   return res.json(contact);
 });
 
+router.post("/contacts/bulk-opt-out", async (req, res) => {
+  const { contactIds } = req.body as { contactIds?: number[] };
+  if (!Array.isArray(contactIds) || contactIds.length === 0) return res.json({ updated: 0 });
+  await db.update(contactsTable).set({ optedOut: true }).where(inArray(contactsTable.id, contactIds));
+  return res.json({ updated: contactIds.length });
+});
+
+router.post("/contacts/bulk-opt-in", async (req, res) => {
+  const { contactIds } = req.body as { contactIds?: number[] };
+  if (!Array.isArray(contactIds) || contactIds.length === 0) return res.json({ updated: 0 });
+  await db.update(contactsTable).set({ optedOut: false }).where(inArray(contactsTable.id, contactIds));
+  return res.json({ updated: contactIds.length });
+});
+
 router.post("/contacts/bulk-delete", async (req, res) => {
   const { contactIds } = BulkDeleteContactsBody.parse(req.body);
   if (contactIds.length === 0) return res.json({ deleted: 0 });
