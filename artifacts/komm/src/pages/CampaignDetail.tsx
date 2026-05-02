@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useParams, useLocation } from "wouter";
 import {
   ArrowLeft, CheckCircle2, XCircle, Clock, Send as SendIcon,
-  Users, Copy, FlaskConical, Phone, Mail, CalendarOff, Edit2,
+  Users, Copy, FlaskConical, Phone, Mail, CalendarOff, Edit2, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -84,13 +84,17 @@ export default function CampaignDetail() {
     query: { enabled: !!campaignId, queryKey: getGetCampaignQueryKey(campaignId) },
   });
 
+  const [msgPage, setMsgPage] = useState(1);
+  const MSG_PAGE_SIZE = 50;
+
   const { data: messages, isLoading: msgLoading } = useListCampaignMessages(
     campaignId,
-    { page: 1, limit: 100 },
+    { page: msgPage, limit: MSG_PAGE_SIZE },
     {
       query: {
         enabled: !!campaignId,
-        queryKey: getListCampaignMessagesQueryKey(campaignId, { page: 1, limit: 100 }),
+        queryKey: getListCampaignMessagesQueryKey(campaignId, { page: msgPage, limit: MSG_PAGE_SIZE }),
+        keepPreviousData: true,
       },
     }
   );
@@ -347,6 +351,38 @@ export default function CampaignDetail() {
             </div>
           )}
         </CardContent>
+      </Card>
+
+      {/* Delivery log pagination */}
+      {(messages?.total ?? 0) > MSG_PAGE_SIZE && (
+        <div className="flex items-center justify-between px-5 py-3 border-t border-border">
+          <span className="text-xs text-muted-foreground">
+            Page {msgPage} of {Math.ceil((messages?.total ?? 0) / MSG_PAGE_SIZE)} · {messages?.total ?? 0} recipients
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => setMsgPage((p) => Math.max(1, p - 1))}
+              disabled={msgPage === 1}
+              data-testid="msg-page-prev"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => setMsgPage((p) => Math.min(Math.ceil((messages?.total ?? 0) / MSG_PAGE_SIZE), p + 1))}
+              disabled={msgPage >= Math.ceil((messages?.total ?? 0) / MSG_PAGE_SIZE)}
+              data-testid="msg-page-next"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      )}
       </Card>
 
       {/* Send Test Dialog */}

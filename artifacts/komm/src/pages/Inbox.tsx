@@ -1,19 +1,23 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import {
-  CheckCheck, Inbox as InboxIcon, CheckSquare, ChevronLeft, ChevronRight, UserCircle,
+  CheckCheck, Inbox as InboxIcon, CheckSquare, ChevronLeft, ChevronRight, UserCircle, Reply,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
 import {
   useListInboxMessages,
   useMarkInboxRead,
   getListInboxMessagesQueryKey,
   getGetDashboardStatsQueryKey,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
@@ -28,8 +32,37 @@ export default function Inbox() {
   const [readFilter, setReadFilter] = useState<string>("all");
   const [markingAll, setMarkingAll] = useState(false);
   const [page, setPage] = useState(1);
+  const [replyMsg, setReplyMsg] = useState<{ id: number; name: string; channel: string } | null>(null);
+  const [replyBody, setReplyBody] = useState("");
   const qc = useQueryClient();
   const { toast } = useToast();
+
+  const sendReply = useMutation({
+    mutationFn: async ({ id, body }: { id: number; body: string }) => {
+      const res = await fetch(`/api/inbox/${id}/reply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body }),
+      });
+      if (!res.ok) throw new Error();
+      return res.json() as Promise<{ success: boolean; simulated?: boolean; error?: string }>;
+    },
+    onSuccess: (data) => {
+      if (data.success) {
+        toast({
+          title: data.simulated ? "Reply simulated ✓" : "Reply sent ✓",
+          description: data.simulated ? "No real provider configured — simulated." : undefined,
+        });
+      } else {
+        toast({ title: "Reply failed", description: data.error ?? "Unknown error", variant: "destructive" });
+      }
+      qc.invalidateQueries({ queryKey: getListInboxMessagesQueryKey() });
+      qc.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() });
+      setReplyMsg(null);
+      setReplyBody("");
+    },
+    onError: () => toast({ title: "Reply failed", variant: "destructive" }),
+  });
 
   const queryArgs = {
     read: readFilter === "unread" ? false : readFilter === "read" ? true : undefined,
@@ -197,6 +230,19 @@ export default function Inbox() {
                         </Button>
                       </Link>
                     )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 text-muted-foreground hover:text-primary"
+                      title={`Reply via ${msg.channel}`}
+                      data-testid={`reply-${msg.id}`}
+                      onClick={() => {
+                        setReplyMsg({ id: msg.id, name: msg.contactName ?? msg.from, channel: msg.channel });
+                        setReplyBody("");
+                      }}
+                    >
+                      <Reply className="w-4 h-4" />
+                    </Button>
                     {!msg.read ? (
                       <Button
                         variant="ghost"
@@ -263,6 +309,53 @@ export default function Inbox() {
           </div>
         )}
       </Card>
+
+      {/* Reply Dialog */}
+      <Dialog open={!!replyMsg} onOpenChange={(open) => { if (!open) { setReplyMsg(null); setReplyBody(""); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Reply className="w-4 h-4 text-primary" />
+              Reply to {replyMsg?.name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Sending via <span className="font-medium capitalize">{replyMsg?.channel}</span> to the same number they messaged from.
+            </p>
+            <Textarea
+              placeholder="Type your reply…"
+              value={replyBody}
+              onChange={(e) => setReplyBody(e.target.value)}
+              rows={4}
+              className="resize-none"
+              data-testid="reply-body"
+            />
+            {replyMsg?.channel === "sms" && (
+              <p className="text-xs text-muted-foreground">
+                {replyBody.length} / 160 chars
+                {replyBody.length > 160 && (
+                  <span className="text-amber-600 ml-1">
+                    · {Math.ceil(replyBody.length / 160)} SMS segments
+                  </span>
+                )}
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setReplyMsg(null); setReplyBody(""); }}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => replyMsg && sendReply.mutate({ id: replyMsg.id, body: replyBody })}
+              disabled={!replyBody.trim() || sendReply.isPending}
+              data-testid="button-send-reply"
+            >
+              {sendReply.isPending ? "Sending…" : "Send Reply"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

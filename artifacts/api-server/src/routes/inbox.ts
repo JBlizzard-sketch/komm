@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db, inboxMessagesTable } from "@workspace/db";
 import { eq, and, sql } from "drizzle-orm";
+import { sendMessage } from "../services/messaging";
 import {
   MarkInboxReadParams,
   ListInboxMessagesQueryParams,
@@ -61,6 +62,35 @@ router.post("/inbox/:id/read", async (req, res) => {
     .returning();
   if (!message) return res.status(404).json({ error: "Not found" });
   return res.json(message);
+});
+
+router.post("/inbox/:id/reply", async (req, res) => {
+  const id = parseInt(req.params["id"] ?? "0", 10);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+
+  const [msg] = await db
+    .select()
+    .from(inboxMessagesTable)
+    .where(eq(inboxMessagesTable.id, id));
+  if (!msg) return res.status(404).json({ error: "Not found" });
+
+  const body: string = (req.body?.body as string | undefined) ?? "";
+  if (!body.trim()) return res.status(400).json({ error: "body is required" });
+
+  const channel = (msg.channel ?? "sms") as "sms" | "whatsapp" | "email";
+  const phone = msg.from;
+
+  const result = await sendMessage(channel, phone, null, body);
+
+  // Mark as read
+  await db.update(inboxMessagesTable).set({ read: true }).where(eq(inboxMessagesTable.id, id));
+
+  return res.json({
+    success: result.success,
+    simulated: result.simulated ?? false,
+    messageId: result.messageId ?? null,
+    error: result.error ?? null,
+  });
 });
 
 export default router;
