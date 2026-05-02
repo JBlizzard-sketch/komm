@@ -422,6 +422,7 @@ export default function Contacts() {
   const [showBulkGroup, setShowBulkGroup] = useState(false);
   const [bulkGroupId, setBulkGroupId] = useState("none");
   const [historyContact, setHistoryContact] = useState<Contact | null>(null);
+  const [exportingAll, setExportingAll] = useState(false);
 
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -447,6 +448,23 @@ export default function Contacts() {
   const openAdd = () => { setEditContact(null); setShowContactForm(true); };
   const openEdit = (c: Contact) => { setEditContact(c); setShowContactForm(true); };
   const closeForm = () => { setShowContactForm(false); setEditContact(null); };
+
+  const handleExportAll = async () => {
+    setExportingAll(true);
+    try {
+      const params = new URLSearchParams({ page: "1", limit: "9999" });
+      if (search) params.set("search", search);
+      if (groupFilter !== "all") params.set("groupId", groupFilter);
+      const res = await fetch(`/api/contacts?${params}`);
+      const json = await res.json();
+      exportContactsCSV(json.data ?? []);
+      toast({ title: `Exported ${(json.data ?? []).length} contacts` });
+    } catch {
+      toast({ title: "Export failed", variant: "destructive" });
+    } finally {
+      setExportingAll(false);
+    }
+  };
 
   const resetPage = () => setPage(1);
 
@@ -516,8 +534,8 @@ export default function Contacts() {
           <p className="text-sm text-muted-foreground mt-0.5">{total} contacts</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="gap-2" onClick={() => exportContactsCSV(contacts)} disabled={contacts.length === 0} data-testid="button-export">
-            <Download className="w-4 h-4" />Export CSV
+          <Button variant="outline" size="sm" className="gap-2" onClick={handleExportAll} disabled={total === 0 || exportingAll} data-testid="button-export">
+            <Download className="w-4 h-4" />{exportingAll ? "Exporting…" : `Export CSV${total > PAGE_SIZE ? ` (${total})` : ""}`}
           </Button>
           <Button variant="outline" size="sm" className="gap-2" onClick={() => setShowImport(true)} data-testid="button-import">
             <Upload className="w-4 h-4" />Import CSV

@@ -1,41 +1,22 @@
 import { Link } from "wouter";
 import {
-  Users,
-  Send,
-  TrendingUp,
-  MessageSquare,
-  CalendarClock,
-  Inbox,
-  Plus,
+  Users, Send, TrendingUp, MessageSquare, CalendarClock, Inbox, Plus, Clock, ArrowRight,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend,
 } from "recharts";
 import {
-  useGetDashboardStats,
-  useGetDashboardActivity,
-  useGetDeliveryTrend,
-  useGetChannelBreakdown,
-  getGetDashboardStatsQueryKey,
-  getGetDashboardActivityQueryKey,
-  getGetDeliveryTrendQueryKey,
-  getGetChannelBreakdownQueryKey,
+  useGetDashboardStats, useGetDashboardActivity, useGetDeliveryTrend, useGetChannelBreakdown,
+  useListCampaigns,
+  getGetDashboardStatsQueryKey, getGetDashboardActivityQueryKey,
+  getGetDeliveryTrendQueryKey, getGetChannelBreakdownQueryKey, getListCampaignsQueryKey,
 } from "@workspace/api-client-react";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 
 const CHANNEL_COLORS: Record<string, string> = {
   sms: "#1e7e4f",
@@ -43,21 +24,27 @@ const CHANNEL_COLORS: Record<string, string> = {
   email: "#f59e0b",
 };
 
+const CHANNEL_BADGE: Record<string, string> = {
+  sms: "bg-primary/10 text-primary",
+  whatsapp: "bg-emerald-100 text-emerald-800",
+  email: "bg-amber-100 text-amber-800",
+};
+
 function StatCard({
-  label,
-  value,
-  icon: Icon,
-  sub,
-  loading,
+  label, value, icon: Icon, sub, loading, href,
 }: {
   label: string;
   value: string | number;
   icon: React.ElementType;
   sub?: string;
   loading?: boolean;
+  href?: string;
 }) {
-  return (
-    <Card data-testid={`stat-${label.toLowerCase().replace(/\s+/g, "-")}`}>
+  const inner = (
+    <Card
+      data-testid={`stat-${label.toLowerCase().replace(/\s+/g, "-")}`}
+      className={href ? "hover:shadow-sm transition-shadow cursor-pointer" : ""}
+    >
       <CardContent className="p-5">
         <div className="flex items-start justify-between">
           <div>
@@ -76,6 +63,7 @@ function StatCard({
       </CardContent>
     </Card>
   );
+  return href ? <Link href={href}>{inner}</Link> : inner;
 }
 
 const ACTIVITY_TYPE_LABEL: Record<string, string> = {
@@ -97,8 +85,8 @@ export default function Dashboard() {
     query: { queryKey: getGetDashboardStatsQueryKey() },
   });
   const { data: activity, isLoading: activityLoading } = useGetDashboardActivity(
-    { limit: 8 },
-    { query: { queryKey: getGetDashboardActivityQueryKey({ limit: 8 }) } }
+    { limit: 6 },
+    { query: { queryKey: getGetDashboardActivityQueryKey({ limit: 6 }) } }
   );
   const { data: trend, isLoading: trendLoading } = useGetDeliveryTrend({
     query: { queryKey: getGetDeliveryTrendQueryKey() },
@@ -106,11 +94,19 @@ export default function Dashboard() {
   const { data: channelBreakdown, isLoading: channelLoading } = useGetChannelBreakdown({
     query: { queryKey: getGetChannelBreakdownQueryKey() },
   });
+  const { data: scheduledData, isLoading: scheduledLoading } = useListCampaigns(
+    { status: "scheduled", page: 1, limit: 5 },
+    { query: { queryKey: getListCampaignsQueryKey({ status: "scheduled", page: 1, limit: 5 }) } }
+  );
 
   const trendData = (trend ?? []).map((d) => ({
     ...d,
     label: format(new Date(d.date), "MMM d"),
   }));
+
+  const upcomingCampaigns = (scheduledData?.data ?? [])
+    .filter((c) => c.scheduledAt)
+    .sort((a, b) => new Date(a.scheduledAt!).getTime() - new Date(b.scheduledAt!).getTime());
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -133,52 +129,22 @@ export default function Dashboard() {
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
         <div className="col-span-2 lg:col-span-1 xl:col-span-1">
-          <StatCard
-            label="Total Contacts"
-            value={stats?.totalContacts?.toLocaleString() ?? 0}
-            icon={Users}
-            loading={statsLoading}
-          />
+          <StatCard label="Total Contacts" value={stats?.totalContacts?.toLocaleString() ?? 0} icon={Users} loading={statsLoading} href="/contacts" />
         </div>
         <div className="col-span-2 lg:col-span-1 xl:col-span-1">
-          <StatCard
-            label="Total Campaigns"
-            value={stats?.totalCampaigns?.toLocaleString() ?? 0}
-            icon={Send}
-            loading={statsLoading}
-          />
+          <StatCard label="Total Campaigns" value={stats?.totalCampaigns?.toLocaleString() ?? 0} icon={Send} loading={statsLoading} href="/campaigns" />
         </div>
         <div className="col-span-2 lg:col-span-1 xl:col-span-1">
-          <StatCard
-            label="Sent This Month"
-            value={stats?.messagesSentThisMonth?.toLocaleString() ?? 0}
-            icon={TrendingUp}
-            loading={statsLoading}
-          />
+          <StatCard label="Sent This Month" value={stats?.messagesSentThisMonth?.toLocaleString() ?? 0} icon={TrendingUp} loading={statsLoading} />
         </div>
         <div className="col-span-2 lg:col-span-1 xl:col-span-1">
-          <StatCard
-            label="Delivery Rate"
-            value={`${stats?.deliveryRate ?? 0}%`}
-            icon={MessageSquare}
-            loading={statsLoading}
-          />
+          <StatCard label="Delivery Rate" value={`${stats?.deliveryRate ?? 0}%`} icon={MessageSquare} loading={statsLoading} />
         </div>
         <div className="col-span-2 lg:col-span-1 xl:col-span-1">
-          <StatCard
-            label="Scheduled"
-            value={stats?.scheduledCampaigns ?? 0}
-            icon={CalendarClock}
-            loading={statsLoading}
-          />
+          <StatCard label="Scheduled" value={stats?.scheduledCampaigns ?? 0} icon={CalendarClock} loading={statsLoading} href="/campaigns?status=scheduled" />
         </div>
         <div className="col-span-2 lg:col-span-1 xl:col-span-1">
-          <StatCard
-            label="Unread Replies"
-            value={stats?.unreadReplies ?? 0}
-            icon={Inbox}
-            loading={statsLoading}
-          />
+          <StatCard label="Unread Replies" value={stats?.unreadReplies ?? 0} icon={Inbox} loading={statsLoading} href="/inbox" />
         </div>
       </div>
 
@@ -254,7 +220,10 @@ export default function Dashboard() {
                       borderRadius: 6,
                       fontSize: 12,
                     }}
-                    formatter={(value, name) => [`${value} (${channelBreakdown.find(c => c.channel === name)?.percentage ?? 0}%)`, name]}
+                    formatter={(value, name) => [
+                      `${value} (${channelBreakdown.find((c) => c.channel === name)?.percentage ?? 0}%)`,
+                      name,
+                    ]}
                   />
                   <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
                 </PieChart>
@@ -264,51 +233,115 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Recent activity */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold">Recent Activity</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {activityLoading ? (
-            <div className="p-4 space-y-3">
-              {[...Array(4)].map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
+      {/* Bottom row: Upcoming + Recent Activity */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        {/* Upcoming scheduled campaigns */}
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <Clock className="w-3.5 h-3.5 text-amber-500" />
+                Upcoming Campaigns
+              </CardTitle>
+              <Link href="/campaigns?status=scheduled">
+                <button className="text-xs text-primary hover:underline flex items-center gap-1">
+                  View all <ArrowRight className="w-3 h-3" />
+                </button>
+              </Link>
             </div>
-          ) : !activity || activity.length === 0 ? (
-            <div className="py-12 text-center text-muted-foreground text-sm">
-              No activity yet. Create and send your first campaign.
-            </div>
-          ) : (
-            <div className="divide-y divide-border">
-              {activity.map((item) => (
-                <div
-                  key={item.id}
-                  data-testid={`activity-item-${item.id}`}
-                  className="flex items-center gap-4 px-5 py-3"
-                >
-                  <Badge
-                    variant="outline"
-                    className={`text-[10px] font-semibold shrink-0 ${ACTIVITY_TYPE_COLOR[item.type] ?? ""}`}
+          </CardHeader>
+          <CardContent className="p-0">
+            {scheduledLoading ? (
+              <div className="p-4 space-y-3">
+                {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-14 rounded-lg" />)}
+              </div>
+            ) : upcomingCampaigns.length === 0 ? (
+              <div className="py-10 text-center px-4">
+                <CalendarClock className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-40" />
+                <p className="text-xs text-muted-foreground">No scheduled campaigns</p>
+                <Link href="/campaigns/new">
+                  <Button size="sm" variant="outline" className="mt-3 h-7 text-xs gap-1.5">
+                    <Plus className="w-3 h-3" /> Schedule one
+                  </Button>
+                </Link>
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {upcomingCampaigns.map((c) => (
+                  <Link key={c.id} href={`/campaigns/${c.id}`}>
+                    <div className="flex items-start gap-3 px-4 py-3 hover:bg-muted/30 transition-colors cursor-pointer">
+                      <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
+                        <Clock className="w-3.5 h-3.5 text-amber-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{c.name}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <Badge variant="outline" className={`text-[10px] capitalize ${CHANNEL_BADGE[c.channel] ?? ""}`}>
+                            {c.channel}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {formatDistanceToNow(new Date(c.scheduledAt!), { addSuffix: true })}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          {format(new Date(c.scheduledAt!), "EEE d MMM, HH:mm")} ·{" "}
+                          {c.recipientCount.toLocaleString()} recipients
+                        </p>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Recent activity */}
+        <Card className="xl:col-span-2">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold">Recent Activity</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {activityLoading ? (
+              <div className="p-4 space-y-3">
+                {[...Array(4)].map((_, i) => (
+                  <Skeleton key={i} className="h-12 w-full" />
+                ))}
+              </div>
+            ) : !activity || activity.length === 0 ? (
+              <div className="py-12 text-center text-muted-foreground text-sm">
+                No activity yet. Create and send your first campaign.
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {activity.map((item) => (
+                  <div
+                    key={item.id}
+                    data-testid={`activity-item-${item.id}`}
+                    className="flex items-center gap-4 px-5 py-3"
                   >
-                    {ACTIVITY_TYPE_LABEL[item.type] ?? item.type}
-                  </Badge>
-                  <span className="text-sm text-foreground flex-1 truncate">{item.description}</span>
-                  {item.channel && (
-                    <Badge variant="outline" className="text-xs capitalize shrink-0">
-                      {item.channel}
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] font-semibold shrink-0 ${ACTIVITY_TYPE_COLOR[item.type] ?? ""}`}
+                    >
+                      {ACTIVITY_TYPE_LABEL[item.type] ?? item.type}
                     </Badge>
-                  )}
-                  <span className="text-xs text-muted-foreground shrink-0">
-                    {format(new Date(item.createdAt), "MMM d, HH:mm")}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                    <span className="text-sm text-foreground flex-1 truncate">{item.description}</span>
+                    {item.channel && (
+                      <Badge variant="outline" className="text-xs capitalize shrink-0">
+                        {item.channel}
+                      </Badge>
+                    )}
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {format(new Date(item.createdAt), "MMM d, HH:mm")}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
