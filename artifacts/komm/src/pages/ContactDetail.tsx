@@ -222,6 +222,25 @@ export default function ContactDetail() {
         </CardContent>
       </Card>
 
+      {/* Member Data / Custom Fields */}
+      {Object.keys((contact.customFields as Record<string, string> | null | undefined) ?? {}).length > 0 && (
+        <Card className="mb-5">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold">Member Data</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {Object.entries((contact.customFields as Record<string, string>)).map(([key, value]) => (
+                <div key={key} className="bg-muted/40 rounded-lg px-3 py-2">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium mb-0.5">{key}</p>
+                  <p className="text-sm font-medium truncate">{value}</p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Message history */}
       <Card>
         <CardHeader className="pb-3">

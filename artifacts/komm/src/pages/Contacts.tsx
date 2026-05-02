@@ -60,7 +60,7 @@ const PAGE_SIZE = 50;
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-interface ParsedContact { name: string; phone: string; email?: string; channel: string }
+interface ParsedContact { name: string; phone: string; email?: string; channel: string; customFields?: Record<string, string> }
 
 interface ContactMessage {
   id: number;
@@ -75,6 +75,8 @@ interface ContactMessage {
 
 // ── CSV helpers ────────────────────────────────────────────────────────────
 
+const KNOWN_CSV_COLS = new Set(["name", "full name", "fullname", "contact name", "phone", "phone number", "mobile", "msisdn", "tel", "email", "email address", "channel", "preferred channel"]);
+
 function parseCSV(text: string): ParsedContact[] {
   const lines = text.trim().split(/\r?\n/);
   if (lines.length < 2) return [];
@@ -84,18 +86,26 @@ function parseCSV(text: string): ParsedContact[] {
   const phoneCol = col(["phone", "phone number", "mobile", "msisdn", "tel"]);
   const emailCol = col(["email", "email address"]);
   const channelCol = col(["channel", "preferred channel"]);
+  const extraCols = headers.map((h, i) => ({ key: h, idx: i })).filter(({ key }) => !KNOWN_CSV_COLS.has(key));
   if (nameCol === -1 || phoneCol === -1) return [];
   return lines.slice(1)
     .map((line) => {
       const cols = line.split(",").map((c) => c.trim().replace(/^"|"$/g, ""));
-      return { name: cols[nameCol] ?? "", phone: cols[phoneCol] ?? "", email: emailCol !== -1 ? cols[emailCol] || undefined : undefined, channel: channelCol !== -1 && cols[channelCol] ? cols[channelCol].toLowerCase() : "sms" };
+      const customFields: Record<string, string> = {};
+      for (const { key, idx } of extraCols) { if (cols[idx]) customFields[key] = cols[idx]; }
+      return { name: cols[nameCol] ?? "", phone: cols[phoneCol] ?? "", email: emailCol !== -1 ? cols[emailCol] || undefined : undefined, channel: channelCol !== -1 && cols[channelCol] ? cols[channelCol].toLowerCase() : "sms", ...(Object.keys(customFields).length > 0 ? { customFields } : {}) };
     })
     .filter((c) => c.name && c.phone);
 }
 
-function exportContactsCSV(contacts: { name: string; phone: string; email: string | null; channel: string }[]) {
-  const header = "name,phone,email,channel";
-  const rows = contacts.map((c) => `"${c.name}","${c.phone}","${c.email ?? ""}","${c.channel}"`);
+function exportContactsCSV(contacts: { name: string; phone: string; email: string | null; channel: string; customFields?: Record<string, unknown> | null }[]) {
+  const customKeys = Array.from(new Set(contacts.flatMap((c) => Object.keys(c.customFields ?? {}))));
+  const header = ["name", "phone", "email", "channel", ...customKeys].join(",");
+  const rows = contacts.map((c) => {
+    const base = [`"${c.name}"`, `"${c.phone}"`, `"${c.email ?? ""}"`, `"${c.channel}"`];
+    const extra = customKeys.map((k) => `"${(c.customFields as Record<string, string> | null | undefined)?.[k] ?? ""}"`);
+    return [...base, ...extra].join(",");
+  });
   const csv = [header, ...rows].join("\n");
   const blob = new Blob([csv], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
@@ -233,7 +243,7 @@ function CSVImportDialog({ open, onClose, groups }: { open: boolean; onClose: ()
   const handleImport = () => {
     if (parsed.length === 0) return;
     importContacts.mutate(
-      { data: { contacts: parsed.map((c) => ({ name: c.name, phone: c.phone, email: c.email ?? null, channel: (c.channel as "sms" | "whatsapp" | "email") || "sms" })), groupId: targetGroup !== "none" ? parseInt(targetGroup) : undefined } },
+      { data: { contacts: parsed.map((c) => ({ name: c.name, phone: c.phone, email: c.email ?? null, channel: (c.channel as "sms" | "whatsapp" | "email") || "sms", customFields: c.customFields ?? null })), groupId: targetGroup !== "none" ? parseInt(targetGroup) : undefined } },
       {
         onSuccess: (res) => { setResult(res); qc.invalidateQueries({ queryKey: getListContactsQueryKey() }); qc.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() }); qc.invalidateQueries({ queryKey: getListGroupsQueryKey() }); },
         onError: () => toast({ title: "Import failed", variant: "destructive" }),
@@ -305,23 +315,36 @@ function ContactFormDialog({
   const updateContact = useUpdateContact();
   const isEdit = !!editContact;
 
+  const [cfPairs, setCfPairs] = useState<{ key: string; value: string }[]>([]);
+
   const form = useForm<ContactFormValues>({
     resolver: zodResolver(contactSchema),
     defaultValues: { name: "", phone: "", email: "", channel: "sms", groupIds: [] },
   });
 
+  const pairsFromContact = (c: Contact | null) =>
+    Object.entries((c?.customFields as Record<string, string> | null | undefined) ?? {}).map(([key, value]) => ({ key, value }));
+
   useState(() => {
     if (editContact) {
       form.reset({ name: editContact.name, phone: editContact.phone, email: editContact.email ?? "", channel: editContact.channel as "sms" | "whatsapp" | "email", groupIds: editContact.groupIds ?? [] });
+      setCfPairs(pairsFromContact(editContact));
     } else {
       form.reset({ name: "", phone: "", email: "", channel: "sms", groupIds: [] });
+      setCfPairs([]);
     }
   });
 
   const handleOpenChange = (open: boolean) => {
-    if (open && editContact) {
-      form.reset({ name: editContact.name, phone: editContact.phone, email: editContact.email ?? "", channel: editContact.channel as "sms" | "whatsapp" | "email", groupIds: editContact.groupIds ?? [] });
-    } else if (!open) {
+    if (open) {
+      if (editContact) {
+        form.reset({ name: editContact.name, phone: editContact.phone, email: editContact.email ?? "", channel: editContact.channel as "sms" | "whatsapp" | "email", groupIds: editContact.groupIds ?? [] });
+        setCfPairs(pairsFromContact(editContact));
+      } else {
+        form.reset({ name: "", phone: "", email: "", channel: "sms", groupIds: [] });
+        setCfPairs([]);
+      }
+    } else {
       onClose();
     }
   };
@@ -333,9 +356,14 @@ function ContactFormDialog({
   };
 
   const onSubmit = (values: ContactFormValues) => {
+    const customFields = cfPairs.reduce<Record<string, string>>((acc, { key, value }) => {
+      if (key.trim()) acc[key.trim()] = value;
+      return acc;
+    }, {});
+    const cfPayload = Object.keys(customFields).length > 0 ? customFields : null;
     if (isEdit && editContact) {
       updateContact.mutate(
-        { id: editContact.id, data: { name: values.name, phone: values.phone, email: values.email || null, channel: values.channel, groupIds: values.groupIds } },
+        { id: editContact.id, data: { name: values.name, phone: values.phone, email: values.email || null, channel: values.channel, groupIds: values.groupIds, customFields: cfPayload } },
         {
           onSuccess: () => { qc.invalidateQueries({ queryKey: getListContactsQueryKey() }); qc.invalidateQueries({ queryKey: getListGroupsQueryKey() }); toast({ title: "Contact updated" }); onClose(); },
           onError: () => toast({ title: "Failed to update contact", variant: "destructive" }),
@@ -343,7 +371,7 @@ function ContactFormDialog({
       );
     } else {
       createContact.mutate(
-        { data: { name: values.name, phone: values.phone, email: values.email || null, channel: values.channel, groupIds: values.groupIds } },
+        { data: { name: values.name, phone: values.phone, email: values.email || null, channel: values.channel, groupIds: values.groupIds, customFields: cfPayload } },
         {
           onSuccess: () => { qc.invalidateQueries({ queryKey: getListContactsQueryKey() }); qc.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() }); qc.invalidateQueries({ queryKey: getListGroupsQueryKey() }); toast({ title: "Contact added" }); onClose(); form.reset(); },
           onError: () => toast({ title: "Failed to add contact", variant: "destructive" }),
@@ -395,6 +423,60 @@ function ContactFormDialog({
                 </div>
               </div>
             )}
+
+            {/* ── Member Data / Custom Fields ─────────────────────────── */}
+            <div className="border border-border rounded-lg p-3 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">Member Data</label>
+                <span className="text-[11px] text-muted-foreground">{"Powers {{name}}, {{amount}}, {{balance}} in messages"}</span>
+              </div>
+
+              {/* Quick-add chips for common SACCO fields */}
+              <div className="flex flex-wrap gap-1.5">
+                {["amount", "balance", "member_no", "due"].map((k) => {
+                  const exists = cfPairs.some((p) => p.key === k);
+                  return !exists ? (
+                    <button key={k} type="button"
+                      className="px-2 py-0.5 text-[11px] border border-dashed border-primary/40 text-primary/80 rounded font-mono hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors"
+                      onClick={() => setCfPairs((prev) => [...prev, { key: k, value: "" }])}>
+                      + {`{{${k}}}`}
+                    </button>
+                  ) : null;
+                })}
+                <button type="button"
+                  className="px-2 py-0.5 text-[11px] border border-dashed border-border rounded text-muted-foreground hover:border-muted-foreground/50 hover:text-foreground transition-colors"
+                  onClick={() => setCfPairs((prev) => [...prev, { key: "", value: "" }])}>
+                  + custom field
+                </button>
+              </div>
+
+              {cfPairs.length > 0 && (
+                <div className="space-y-1.5">
+                  {cfPairs.map((pair, i) => (
+                    <div key={i} className="flex gap-1.5 items-center">
+                      <Input
+                        placeholder="field"
+                        value={pair.key}
+                        onChange={(e) => setCfPairs((prev) => prev.map((p, j) => j === i ? { ...p, key: e.target.value } : p))}
+                        className="h-7 text-xs font-mono w-28 shrink-0"
+                      />
+                      <Input
+                        placeholder="value"
+                        value={pair.value}
+                        onChange={(e) => setCfPairs((prev) => prev.map((p, j) => j === i ? { ...p, value: e.target.value } : p))}
+                        className="h-7 text-xs flex-1"
+                      />
+                      <button type="button"
+                        onClick={() => setCfPairs((prev) => prev.filter((_, j) => j !== i))}
+                        className="text-muted-foreground hover:text-destructive transition-colors p-1 shrink-0">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <DialogFooter>
               <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
               <Button type="submit" disabled={isPending} data-testid="button-save-contact">
