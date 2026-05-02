@@ -123,8 +123,31 @@ const RANGE_OPTIONS = [
   { label: "12 months", days: 365 },
 ];
 
+type SortKey = "name" | "recipientCount" | "deliveredCount" | "failedCount" | "deliveryRate" | "sentAt";
+type SortDir = "asc" | "desc";
+
+function SortHeader({ label, sortKey, current, dir, onSort, className }: { label: string; sortKey: SortKey; current: SortKey | null; dir: SortDir; onSort: (k: SortKey) => void; className?: string }) {
+  const active = current === sortKey;
+  return (
+    <button
+      className={`flex items-center gap-0.5 hover:text-foreground transition-colors ${active ? "text-foreground" : ""} ${className ?? ""}`}
+      onClick={() => onSort(sortKey)}
+    >
+      {label}
+      <span className="text-[10px] ml-0.5">{active ? (dir === "asc" ? "↑" : "↓") : "↕"}</span>
+    </button>
+  );
+}
+
 export default function Reports() {
   const [days, setDays] = useState(30);
+  const [sortKey, setSortKey] = useState<SortKey | null>("sentAt");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  const handleSort = (k: SortKey) => {
+    if (sortKey === k) setSortDir((d) => d === "asc" ? "desc" : "asc");
+    else { setSortKey(k); setSortDir("desc"); }
+  };
 
   const { data: stats, isLoading: statsLoading } = useGetDashboardStats({
     query: { queryKey: getGetDashboardStatsQueryKey(), staleTime: 60_000 },
@@ -160,6 +183,22 @@ export default function Reports() {
     cost: (COST_PER_MSG[b.channel] ?? 0) * b.count,
   }));
   const totalCost = costByChannel.reduce((s, c) => s + c.cost, 0);
+
+  const sortedCampaigns = useMemo(() => {
+    if (!reportCampaigns) return [];
+    const list = [...reportCampaigns];
+    if (!sortKey) return list;
+    return list.sort((a, b) => {
+      let av: number | string = 0;
+      let bv: number | string = 0;
+      if (sortKey === "name") { av = a.name.toLowerCase(); bv = b.name.toLowerCase(); }
+      else if (sortKey === "sentAt") { av = a.sentAt ? new Date(a.sentAt).getTime() : 0; bv = b.sentAt ? new Date(b.sentAt).getTime() : 0; }
+      else { av = (a as unknown as Record<string, number>)[sortKey] ?? 0; bv = (b as unknown as Record<string, number>)[sortKey] ?? 0; }
+      if (av < bv) return sortDir === "asc" ? -1 : 1;
+      if (av > bv) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+  }, [reportCampaigns, sortKey, sortDir]);
 
   const deliveryRateByChannel = useMemo(() => {
     if (!reportCampaigns || reportCampaigns.length === 0) return [];
@@ -454,26 +493,24 @@ export default function Reports() {
             <div className="divide-y divide-border">
               {/* Table header */}
               <div className="grid grid-cols-12 px-5 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wide bg-muted/40">
-                <span className="col-span-4">Campaign</span>
+                <SortHeader label="Campaign" sortKey="name" current={sortKey} dir={sortDir} onSort={handleSort} className="col-span-4" />
                 <span className="col-span-2 text-center">Channel</span>
-                <span className="col-span-1 text-right">Sent</span>
-                <span className="col-span-1 text-right">Delivered</span>
-                <span className="col-span-1 text-right">Failed</span>
-                <span className="col-span-2 pl-2">Delivery Rate</span>
-                <span className="col-span-1" />
+                <SortHeader label="Sent" sortKey="recipientCount" current={sortKey} dir={sortDir} onSort={handleSort} className="col-span-1 justify-end" />
+                <SortHeader label="Deliv." sortKey="deliveredCount" current={sortKey} dir={sortDir} onSort={handleSort} className="col-span-1 justify-end" />
+                <SortHeader label="Failed" sortKey="failedCount" current={sortKey} dir={sortDir} onSort={handleSort} className="col-span-1 justify-end" />
+                <SortHeader label="Rate" sortKey="deliveryRate" current={sortKey} dir={sortDir} onSort={handleSort} className="col-span-2 pl-2" />
+                <SortHeader label="Date" sortKey="sentAt" current={sortKey} dir={sortDir} onSort={handleSort} className="col-span-1 justify-end" />
               </div>
-              {(reportCampaigns ?? []).map((c) => {
+              {sortedCampaigns.map((c) => {
                 const Icon = CHANNEL_ICONS[c.channel] ?? MessageSquare;
                 return (
                   <Link key={c.id} href={`/campaigns/${c.id}`}>
                     <div className="grid grid-cols-12 px-5 py-3 items-center hover:bg-muted/20 transition-colors cursor-pointer">
                       <div className="col-span-4 min-w-0 pr-3">
                         <p className="text-sm font-medium truncate">{c.name}</p>
-                        {c.sentAt && (
-                          <p className="text-xs text-muted-foreground">
-                            {format(new Date(c.sentAt), "d MMM yyyy")}
-                          </p>
-                        )}
+                        <Badge variant="outline" className="text-[9px] capitalize mt-0.5 gap-1 shrink-0">
+                          <Icon className="w-2.5 h-2.5" />{CHANNEL_LABELS[c.channel] ?? c.channel}
+                        </Badge>
                       </div>
                       <div className="col-span-2 flex justify-center">
                         <Badge variant="outline" className="text-[10px] capitalize gap-1 shrink-0">
@@ -493,9 +530,9 @@ export default function Reports() {
                       <div className="col-span-2 pl-2">
                         <DeliveryBar rate={c.deliveryRate} />
                       </div>
-                      <div className="col-span-1 flex justify-end">
-                        <ArrowRight className="w-3.5 h-3.5 text-muted-foreground" />
-                      </div>
+                      <p className="col-span-1 text-xs text-right text-muted-foreground pr-1">
+                        {c.sentAt ? format(new Date(c.sentAt), "d MMM") : "—"}
+                      </p>
                     </div>
                   </Link>
                 );

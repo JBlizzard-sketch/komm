@@ -44,6 +44,27 @@ function normalizePhone(raw: string): string {
 
 // ── Contacts ──────────────────────────────────────────────────────────────
 
+router.get("/contacts/stats", async (_req, res) => {
+  const rows = await db
+    .select({
+      channel: contactsTable.channel,
+      optedOut: contactsTable.optedOut,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(contactsTable)
+    .groupBy(contactsTable.channel, contactsTable.optedOut);
+
+  const stats = { total: 0, sms: 0, whatsapp: 0, email: 0, optedOut: 0 };
+  for (const r of rows) {
+    stats.total += r.count;
+    if (r.channel === "sms") stats.sms += r.count;
+    else if (r.channel === "whatsapp") stats.whatsapp += r.count;
+    else if (r.channel === "email") stats.email += r.count;
+    if (r.optedOut) stats.optedOut += r.count;
+  }
+  return res.json(stats);
+});
+
 router.get("/contacts", async (req, res) => {
   const query = ListContactsQueryParams.parse(req.query);
   const { search, groupId, page, limit } = query;

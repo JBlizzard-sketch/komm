@@ -354,6 +354,12 @@ export default function Contacts() {
 
   const { data: groups } = useListGroups({ query: { queryKey: getListGroupsQueryKey() } });
 
+  const { data: contactStats } = useQuery<{ total: number; sms: number; whatsapp: number; email: number; optedOut: number }>({
+    queryKey: ["contacts", "stats"],
+    queryFn: () => fetch("/api/contacts/stats").then((r) => r.json()),
+    staleTime: 30_000,
+  });
+
   const isOptedOutFilter = groupFilter === "opted-out";
   const queryParams = {
     search: search || undefined,
@@ -537,6 +543,31 @@ export default function Contacts() {
           </Button>
         </div>
       </div>
+
+      {contactStats && (contactStats.sms > 0 || contactStats.whatsapp > 0 || contactStats.email > 0) && (
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          {contactStats.sms > 0 && (
+            <button onClick={() => handleChannelFilterChange(channelFilter === "sms" ? "all" : "sms")} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${channelFilter === "sms" ? "bg-primary/10 text-primary border-primary/30" : "bg-background text-muted-foreground border-border hover:border-primary/40"}`}>
+              <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />SMS · {contactStats.sms}
+            </button>
+          )}
+          {contactStats.whatsapp > 0 && (
+            <button onClick={() => handleChannelFilterChange(channelFilter === "whatsapp" ? "all" : "whatsapp")} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${channelFilter === "whatsapp" ? "bg-emerald-100 text-emerald-800 border-emerald-300" : "bg-background text-muted-foreground border-border hover:border-emerald-300"}`}>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />WhatsApp · {contactStats.whatsapp}
+            </button>
+          )}
+          {contactStats.email > 0 && (
+            <button onClick={() => handleChannelFilterChange(channelFilter === "email" ? "all" : "email")} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${channelFilter === "email" ? "bg-amber-100 text-amber-800 border-amber-300" : "bg-background text-muted-foreground border-border hover:border-amber-300"}`}>
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />Email · {contactStats.email}
+            </button>
+          )}
+          {contactStats.optedOut > 0 && (
+            <button onClick={() => handleGroupFilterChange(groupFilter === "opted-out" ? "all" : "opted-out")} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${groupFilter === "opted-out" ? "bg-red-100 text-red-700 border-red-300" : "bg-background text-muted-foreground border-border hover:border-red-300"}`}>
+              <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />Opted out · {contactStats.optedOut}
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="flex gap-3 mb-4">
         <div className="relative flex-1 max-w-xs">
