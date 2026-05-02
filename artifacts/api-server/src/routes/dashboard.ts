@@ -16,6 +16,7 @@ router.get("/dashboard/stats", async (req, res) => {
     deliveryStats,
     scheduledCount,
     unreadCount,
+    optedOutCount,
   ] = await Promise.all([
     db.select({ count: sql<number>`count(*)::int` }).from(contactsTable),
     db.select({ count: sql<number>`count(*)::int` }).from(campaignsTable),
@@ -37,6 +38,10 @@ router.get("/dashboard/stats", async (req, res) => {
       .select({ count: sql<number>`count(*)::int` })
       .from(inboxMessagesTable)
       .where(eq(inboxMessagesTable.read, false)),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(contactsTable)
+      .where(eq(contactsTable.optedOut, true)),
   ]);
 
   const total = deliveryStats[0]?.total ?? 0;
@@ -50,6 +55,7 @@ router.get("/dashboard/stats", async (req, res) => {
     deliveryRate,
     scheduledCampaigns: scheduledCount[0]?.count ?? 0,
     unreadReplies: unreadCount[0]?.count ?? 0,
+    optedOutContacts: optedOutCount[0]?.count ?? 0,
   });
 });
 

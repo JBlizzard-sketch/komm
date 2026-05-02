@@ -429,13 +429,32 @@ export default function Contacts() {
 
   const { data: groups } = useListGroups({ query: { queryKey: getListGroupsQueryKey() } });
 
+  const isOptedOutFilter = groupFilter === "opted-out";
   const queryParams = {
     search: search || undefined,
-    groupId: groupFilter !== "all" ? parseInt(groupFilter) : undefined,
+    groupId: !isOptedOutFilter && groupFilter !== "all" ? parseInt(groupFilter) : undefined,
     page,
     limit: PAGE_SIZE,
   };
-  const { data, isLoading } = useListContacts(queryParams, { query: { queryKey: getListContactsQueryKey(queryParams) } });
+  const queryKey = [...getListContactsQueryKey(queryParams), isOptedOutFilter ? "opted-out" : "all"] as const;
+  const { data, isLoading } = useListContacts(
+    queryParams,
+    {
+      query: {
+        queryKey,
+        queryFn: async () => {
+          const qs = new URLSearchParams();
+          if (queryParams.search) qs.set("search", queryParams.search);
+          if (queryParams.groupId) qs.set("groupId", String(queryParams.groupId));
+          qs.set("page", String(queryParams.page));
+          qs.set("limit", String(queryParams.limit));
+          if (isOptedOutFilter) qs.set("optedOutOnly", "true");
+          const res = await fetch(`/api/contacts?${qs}`);
+          return res.json();
+        },
+      },
+    }
+  );
 
   const contacts = data?.data ?? [];
   const total = data?.total ?? 0;
@@ -564,9 +583,10 @@ export default function Contacts() {
           <Input placeholder="Search name or phone..." value={search} onChange={(e) => handleSearchChange(e.target.value)} className="pl-9 h-8 text-sm" />
         </div>
         <Select value={groupFilter} onValueChange={handleGroupFilterChange}>
-          <SelectTrigger className="w-40 h-8 text-sm"><SelectValue placeholder="All groups" /></SelectTrigger>
+          <SelectTrigger className="w-44 h-8 text-sm"><SelectValue placeholder="All groups" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All groups</SelectItem>
+            <SelectItem value="opted-out">Opted out only</SelectItem>
             {(groups ?? []).map((g) => (<SelectItem key={g.id} value={String(g.id)}>{g.name} ({g.contactCount})</SelectItem>))}
           </SelectContent>
         </Select>

@@ -30,12 +30,16 @@ const router = Router();
 router.get("/contacts", async (req, res) => {
   const query = ListContactsQueryParams.parse(req.query);
   const { search, groupId, page, limit } = query;
+  const optedOutOnly = req.query["optedOutOnly"] === "true";
 
   let conditions: ReturnType<typeof and>[] = [];
   if (search) {
     conditions.push(
       sql`(${contactsTable.name} ILIKE ${"%" + search + "%"} OR ${contactsTable.phone} ILIKE ${"%" + search + "%"})`
     );
+  }
+  if (optedOutOnly) {
+    conditions.push(eq(contactsTable.optedOut, true));
   }
 
   let contactIds: number[] | undefined;
