@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db, campaignsTable, campaignMessagesTable, contactsTable, contactGroupsTable } from "@workspace/db";
 import { eq, inArray, sql, and } from "drizzle-orm";
+import { sendMessage, isSimulated } from "../services/messaging";
 import {
   CreateCampaignBody,
   GetCampaignParams,
@@ -138,8 +139,18 @@ router.post("/campaigns/:id/send", async (req, res) => {
   const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, id));
   if (!campaign) return res.status(404).json({ error: "Not found" });
 
+  // If scheduled for the future, just mark as scheduled
+  if (campaign.scheduledAt && campaign.scheduledAt > new Date()) {
+    const [updated] = await db
+      .update(campaignsTable)
+      .set({ status: "scheduled" })
+      .where(eq(campaignsTable.id, id))
+      .returning();
+    return res.json(updated);
+  }
+
   // Gather all contacts in the target groups
-  let contacts: { id: number; name: string; phone: string }[] = [];
+  let contacts: { id: number; name: string; phone: string; email: string | null; channel: string }[] = [];
   if (campaign.groupIds.length > 0) {
     const memberships = await db
       .select({ contactId: contactGroupsTable.contactId })
@@ -148,42 +159,55 @@ router.post("/campaigns/:id/send", async (req, res) => {
     const contactIds = [...new Set(memberships.map((m) => m.contactId))];
     if (contactIds.length > 0) {
       contacts = await db
-        .select({ id: contactsTable.id, name: contactsTable.name, phone: contactsTable.phone })
+        .select({
+          id: contactsTable.id,
+          name: contactsTable.name,
+          phone: contactsTable.phone,
+          email: contactsTable.email,
+          channel: contactsTable.channel,
+        })
         .from(contactsTable)
         .where(inArray(contactsTable.id, contactIds));
     }
   }
 
-  // Create campaign message records (simulated send)
-  if (contacts.length > 0) {
-    const statuses = ["delivered", "delivered", "delivered", "sent", "failed"];
-    await db.insert(campaignMessagesTable).values(
-      contacts.map((c, i) => {
-        const status = statuses[i % statuses.length];
-        return {
-          campaignId: id,
-          contactId: c.id,
-          contactName: c.name,
-          phone: c.phone,
-          status,
-          deliveredAt: status === "delivered" ? new Date() : null,
-          errorMessage: status === "failed" ? "Number unreachable" : null,
-        };
-      })
-    );
+  // Mark campaign as sending
+  await db.update(campaignsTable).set({ status: "sending" }).where(eq(campaignsTable.id, id));
+
+  // Send messages (real or simulated)
+  const messageRows = [];
+  for (const contact of contacts) {
+    const body = campaign.body.replace(/{{name}}/g, contact.name);
+    const result = await sendMessage(campaign.channel, contact.phone, contact.email, body);
+    messageRows.push({
+      campaignId: id,
+      contactId: contact.id,
+      contactName: contact.name,
+      phone: contact.phone,
+      status: result.success ? "delivered" : "failed",
+      deliveredAt: result.success ? new Date() : null,
+      errorMessage: result.error ?? null,
+    });
+  }
+
+  if (messageRows.length > 0) {
+    await db.insert(campaignMessagesTable).values(messageRows);
   }
 
   const [updated] = await db
     .update(campaignsTable)
     .set({
-      status: campaign.scheduledAt && campaign.scheduledAt > new Date() ? "scheduled" : "sent",
+      status: "sent",
       sentAt: new Date(),
       recipientCount: contacts.length,
     })
     .where(eq(campaignsTable.id, id))
     .returning();
 
-  return res.json(updated);
+  return res.json({
+    ...updated,
+    simulated: isSimulated[campaign.channel as "sms" | "whatsapp" | "email"] ?? true,
+  });
 });
 
 router.get("/campaigns/:id/messages", async (req, res) => {

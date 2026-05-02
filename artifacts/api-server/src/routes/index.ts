@@ -5,6 +5,7 @@ import templatesRouter from "./templates";
 import campaignsRouter from "./campaigns";
 import inboxRouter from "./inbox";
 import dashboardRouter from "./dashboard";
+import webhooksRouter from "./webhooks";
 
 const router: IRouter = Router();
 
@@ -14,5 +15,6 @@ router.use(templatesRouter);
 router.use(campaignsRouter);
 router.use(inboxRouter);
 router.use(dashboardRouter);
+router.use(webhooksRouter);
 
 export default router;

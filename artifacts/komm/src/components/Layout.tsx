@@ -8,9 +8,9 @@ import {
   FileText,
   Inbox,
   Menu,
-  X,
   MessageSquare,
   ChevronRight,
+  Settings2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useGetDashboardStats, getGetDashboardStatsQueryKey } from "@workspace/api-client-react";
@@ -23,6 +23,7 @@ const navItems = [
   { href: "/groups", label: "Groups", icon: FolderOpen },
   { href: "/templates", label: "Templates", icon: FileText },
   { href: "/inbox", label: "Inbox", icon: Inbox },
+  { href: "/settings", label: "Settings", icon: Settings2 },
 ];
 
 function NavLink({
