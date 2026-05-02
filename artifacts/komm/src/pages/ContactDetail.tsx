@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useLocation } from "wouter";
-import { ArrowLeft, Phone, Mail, Users, MessageSquare, Calendar, Edit2, Trash2, BellOff, Bell } from "lucide-react";
+import { ArrowLeft, Phone, Mail, Users, MessageSquare, Calendar, Edit2, Trash2, BellOff, Bell, Plus, Send as SendIcon, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   useGetContact, useDeleteContact, useListGroups,
+  useRemoveContactFromGroup, useBulkAddContactsToGroup,
   getListContactsQueryKey, getGetContactQueryKey,
 } from "@workspace/api-client-react";
 import { useMutation } from "@tanstack/react-query";
@@ -50,6 +51,8 @@ export default function ContactDetail() {
   const [messages, setMessages] = useState<ContactMessage[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
+  const [addingGroup, setAddingGroup] = useState(false);
+  const [selectedNewGroupId, setSelectedNewGroupId] = useState<string>("none");
 
   const { data: contact, isLoading } = useGetContact(contactId, {
     query: {
@@ -73,6 +76,39 @@ export default function ContactDetail() {
   }, [contactId, contact]);
 
   const deleteContact = useDeleteContact();
+  const removeFromGroup = useRemoveContactFromGroup();
+  const addToGroup = useBulkAddContactsToGroup();
+
+  const handleRemoveFromGroup = (groupId: number) => {
+    removeFromGroup.mutate(
+      { id: groupId, params: { contactId } },
+      {
+        onSuccess: () => {
+          qc.invalidateQueries({ queryKey: getGetContactQueryKey(contactId) });
+          qc.invalidateQueries({ queryKey: getListContactsQueryKey() });
+          toast({ title: "Removed from group" });
+        },
+        onError: () => toast({ title: "Failed to remove from group", variant: "destructive" }),
+      }
+    );
+  };
+
+  const handleAddToGroup = () => {
+    if (selectedNewGroupId === "none") return;
+    addToGroup.mutate(
+      { data: { contactIds: [contactId], groupId: parseInt(selectedNewGroupId) } },
+      {
+        onSuccess: () => {
+          qc.invalidateQueries({ queryKey: getGetContactQueryKey(contactId) });
+          qc.invalidateQueries({ queryKey: getListContactsQueryKey() });
+          toast({ title: "Added to group" });
+          setSelectedNewGroupId("none");
+          setAddingGroup(false);
+        },
+        onError: () => toast({ title: "Failed to add to group", variant: "destructive" }),
+      }
+    );
+  };
 
   const toggleOptOut = useMutation({
     mutationFn: async (optOut: boolean) => {
@@ -155,7 +191,17 @@ export default function ContactDetail() {
             Added {format(new Date(contact.createdAt), "d MMM yyyy")}
           </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => navigate(`/campaigns/new?channel=${contact.channel}`)}
+            data-testid="button-send-message"
+          >
+            <SendIcon className="w-4 h-4" />
+            New Campaign
+          </Button>
           {(contact as { optedOut?: boolean }).optedOut ? (
             <Button
               variant="outline"
@@ -252,23 +298,76 @@ export default function ContactDetail() {
           </div>
 
           <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0 mt-0.5">
               <Users className="w-4 h-4 text-muted-foreground" />
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Groups</p>
-              {(contact.groupIds ?? []).length === 0 ? (
-                <p className="text-sm text-muted-foreground mt-0.5">No groups</p>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs text-muted-foreground">Groups</p>
+                <button
+                  onClick={() => setAddingGroup((v) => !v)}
+                  className="flex items-center gap-1 text-xs text-primary hover:underline"
+                  data-testid="button-add-to-group"
+                >
+                  <Plus className="w-3 h-3" />
+                  Add
+                </button>
+              </div>
+              {(contact.groupIds ?? []).length === 0 && !addingGroup ? (
+                <p className="text-sm text-muted-foreground">Not in any group</p>
               ) : (
-                <div className="flex flex-wrap gap-1 mt-1">
+                <div className="flex flex-wrap gap-1">
                   {(contact.groupIds ?? []).map((gid) => {
                     const grp = allGroups?.find((g) => g.id === gid);
                     return (
-                      <Badge key={gid} variant="outline" className="text-xs">
+                      <span key={gid} className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs">
                         {grp ? grp.name : `Group ${gid}`}
-                      </Badge>
+                        <button
+                          onClick={() => handleRemoveFromGroup(gid)}
+                          disabled={removeFromGroup.isPending}
+                          className="text-muted-foreground hover:text-destructive transition-colors"
+                          title="Remove from group"
+                          data-testid={`remove-from-group-${gid}`}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
                     );
                   })}
+                </div>
+              )}
+              {addingGroup && (
+                <div className="flex items-center gap-2 mt-2">
+                  <select
+                    value={selectedNewGroupId}
+                    onChange={(e) => setSelectedNewGroupId(e.target.value)}
+                    className="flex-1 h-7 rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    data-testid="select-add-to-group"
+                  >
+                    <option value="none">Select group…</option>
+                    {(allGroups ?? [])
+                      .filter((g) => !(contact.groupIds ?? []).includes(g.id))
+                      .map((g) => (
+                        <option key={g.id} value={String(g.id)}>{g.name}</option>
+                      ))}
+                  </select>
+                  <Button
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={handleAddToGroup}
+                    disabled={selectedNewGroupId === "none" || addToGroup.isPending}
+                    data-testid="button-confirm-add-to-group"
+                  >
+                    Add
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => { setAddingGroup(false); setSelectedNewGroupId("none"); }}
+                  >
+                    <X className="w-3 h-3" />
+                  </Button>
                 </div>
               )}
             </div>
@@ -283,6 +382,26 @@ export default function ContactDetail() {
               <p className="text-sm font-medium">{format(new Date(contact.createdAt), "d MMM yyyy, HH:mm")}</p>
             </div>
           </div>
+
+          {messages.length > 0 && (() => {
+            const lastMsg = messages.reduce((best, m) => {
+              const bestDate = best.deliveredAt ?? best.sentAt ?? "";
+              const thisDate = m.deliveredAt ?? m.sentAt ?? "";
+              return thisDate > bestDate ? m : best;
+            });
+            const lastDate = lastMsg.deliveredAt ?? lastMsg.sentAt;
+            return lastDate ? (
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                  <MessageSquare className="w-4 h-4 text-muted-foreground" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Last Contacted</p>
+                  <p className="text-sm font-medium">{format(new Date(lastDate), "d MMM yyyy, HH:mm")}</p>
+                </div>
+              </div>
+            ) : null;
+          })()}
         </CardContent>
       </Card>
 
