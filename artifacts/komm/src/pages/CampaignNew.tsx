@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation, useSearch } from "wouter";
 import { ArrowLeft, MessageSquare, Mail, Send } from "lucide-react";
 import { useForm } from "react-hook-form";
@@ -180,6 +180,25 @@ export default function CampaignNew() {
   const selectedGroupIds = form.watch("groupIds");
   const { chars, segments } = smsSegments(body);
 
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const insertVar = (variable: string) => {
+    const el = textareaRef.current;
+    const tag = `{{${variable}}}`;
+    if (!el) {
+      form.setValue("body", body + tag);
+      return;
+    }
+    const start = el.selectionStart ?? body.length;
+    const end = el.selectionEnd ?? body.length;
+    const newVal = body.slice(0, start) + tag + body.slice(end);
+    form.setValue("body", newVal, { shouldDirty: true });
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(start + tag.length, start + tag.length);
+    });
+  };
+
   const handleTemplateSelect = (templateId: string) => {
     if (templateId === "none") { form.setValue("templateId", null); return; }
     const tid = parseInt(templateId);
@@ -344,8 +363,25 @@ export default function CampaignNew() {
                   </span>
                 )}
               </div>
+              <div className="flex flex-wrap gap-1.5 mb-1.5">
+                {["name", "amount", "date", "balance", "due"].map((v) => (
+                  <button key={v} type="button" onClick={() => insertVar(v)}
+                    className="px-2 py-0.5 rounded border border-dashed border-primary/40 text-xs text-primary/80 hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors font-mono">
+                    {`{{${v}}}`}
+                  </button>
+                ))}
+              </div>
               <FormControl>
-                <Textarea placeholder="Type your message... Use {{name}}, {{amount}}, {{date}} for personalisation." rows={5} data-testid="input-message-body" {...field} />
+                <Textarea
+                  placeholder="Type your message... Click a tag above to insert personalisation."
+                  rows={5}
+                  data-testid="input-message-body"
+                  {...field}
+                  ref={(el) => {
+                    (textareaRef as React.MutableRefObject<HTMLTextAreaElement | null>).current = el;
+                    if (typeof field.ref === "function") field.ref(el);
+                  }}
+                />
               </FormControl>
               <FormMessage />
               {channel === "sms" && chars > 160 && (
