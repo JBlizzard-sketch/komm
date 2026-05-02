@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, campaignsTable, campaignMessagesTable, contactsTable, contactGroupsTable, orgSettingsTable } from "@workspace/db";
-import { eq, inArray, sql, and, ilike, or } from "drizzle-orm";
+import { eq, inArray, sql, and, ilike, or, ne } from "drizzle-orm";
 import { sendMessage, isSimulated } from "../services/messaging";
 import {
   CreateCampaignBody,
@@ -160,6 +160,18 @@ router.delete("/campaigns/:id", async (req, res) => {
   const { id } = DeleteCampaignParams.parse(req.params);
   await db.delete(campaignsTable).where(eq(campaignsTable.id, id));
   return res.status(204).send();
+});
+
+router.post("/campaigns/:id/opt-out-failed", async (req, res) => {
+  const { id } = GetCampaignParams.parse(req.params);
+  const failedContacts = await db
+    .select({ contactId: campaignMessagesTable.contactId })
+    .from(campaignMessagesTable)
+    .where(and(eq(campaignMessagesTable.campaignId, id), eq(campaignMessagesTable.status, "failed")));
+  const ids = [...new Set(failedContacts.map((r) => r.contactId).filter((cid): cid is number => cid !== null))];
+  if (ids.length === 0) return res.json({ updated: 0 });
+  await db.update(contactsTable).set({ optedOut: true }).where(inArray(contactsTable.id, ids));
+  return res.json({ updated: ids.length });
 });
 
 router.post("/campaigns/:id/cancel", async (req, res) => {

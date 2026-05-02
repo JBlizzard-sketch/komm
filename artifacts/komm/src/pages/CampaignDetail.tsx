@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import {
   ArrowLeft, CheckCircle2, XCircle, Clock, Send as SendIcon,
-  Users, Copy, FlaskConical, Phone, Mail, CalendarOff, Edit2, ChevronLeft, ChevronRight, Loader2, Download,
+  Users, Copy, FlaskConical, Phone, Mail, CalendarOff, Edit2, ChevronLeft, ChevronRight, Loader2, Download, BellOff,
 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -81,6 +81,23 @@ export default function CampaignDetail() {
   const [testEmail, setTestEmail] = useState("");
 
   const [cancelling, setCancelling] = useState(false);
+  const [optingOutFailed, setOptingOutFailed] = useState(false);
+
+  const handleOptOutFailed = async () => {
+    if (!window.confirm("Opt out all contacts with failed delivery? They won't receive future campaigns.")) return;
+    setOptingOutFailed(true);
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}/opt-out-failed`, { method: "POST" });
+      const data: { updated: number } = await res.json();
+      qc.invalidateQueries({ queryKey: getListCampaignMessagesQueryKey(campaignId) });
+      toast({ title: `${data.updated} contact${data.updated !== 1 ? "s" : ""} opted out` });
+    } catch {
+      toast({ title: "Failed to opt out contacts", variant: "destructive" });
+    } finally {
+      setOptingOutFailed(false);
+    }
+  };
+
   const sendCampaign = useSendCampaign();
   const testCampaign = useTestCampaign();
   const duplicateCampaign = useDuplicateCampaign();
@@ -408,19 +425,34 @@ export default function CampaignDetail() {
                 </button>
               ))}
             </div>
-            {(messages?.total ?? 0) > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 gap-1.5 text-xs shrink-0"
-                onClick={handleExportCSV}
-                disabled={exporting}
-                data-testid="button-export-delivery-log"
-              >
-                <Download className="w-3 h-3" />
-                {exporting ? "Exporting…" : "Export CSV"}
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              {msgStatus === "failed" && (messages?.total ?? 0) > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1.5 text-xs shrink-0 text-destructive hover:bg-destructive/10 border-destructive/30"
+                  onClick={handleOptOutFailed}
+                  disabled={optingOutFailed}
+                  data-testid="button-opt-out-failed"
+                >
+                  <BellOff className="w-3 h-3" />
+                  {optingOutFailed ? "Opting out…" : `Opt out all (${messages?.total ?? 0})`}
+                </Button>
+              )}
+              {(messages?.total ?? 0) > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1.5 text-xs shrink-0"
+                  onClick={handleExportCSV}
+                  disabled={exporting}
+                  data-testid="button-export-delivery-log"
+                >
+                  <Download className="w-3 h-3" />
+                  {exporting ? "Exporting…" : "Export CSV"}
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
 

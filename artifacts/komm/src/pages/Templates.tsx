@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Plus, FileText, Trash2, Edit2, Tag, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -318,21 +318,53 @@ export default function Templates() {
                   </FormItem>
                 )} />
               </div>
-              <FormField control={form.control} name="body" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Message Body</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Dear {{name}}, your contribution of Ksh {{amount}} is due on {{date}}. Please ensure timely payment."
-                      rows={5}
-                      data-testid="input-template-body"
-                      {...field}
-                    />
-                  </FormControl>
-                  <p className="text-xs text-muted-foreground">Use &#123;&#123;variable&#125;&#125; for personalisation placeholders.</p>
-                  <FormMessage />
-                </FormItem>
-              )} />
+              <FormField control={form.control} name="body" render={({ field }) => {
+                const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+                const insertVar = (variable: string) => {
+                  const tag = `{{${variable}}}`;
+                  const el = textareaRef.current;
+                  if (!el) { form.setValue("body", field.value + tag, { shouldDirty: true }); return; }
+                  const start = el.selectionStart ?? field.value.length;
+                  const end = el.selectionEnd ?? field.value.length;
+                  const newVal = field.value.slice(0, start) + tag + field.value.slice(end);
+                  form.setValue("body", newVal, { shouldDirty: true });
+                  requestAnimationFrame(() => {
+                    el.focus();
+                    el.setSelectionRange(start + tag.length, start + tag.length);
+                  });
+                };
+                return (
+                  <FormItem>
+                    <FormLabel>Message Body</FormLabel>
+                    <div className="flex flex-wrap gap-1.5 mb-1.5">
+                      {["name", "amount", "date", "balance", "due", "org_name"].map((v) => (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => insertVar(v)}
+                          className="px-2 py-0.5 rounded border border-dashed border-primary/40 text-xs text-primary/80 hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors font-mono"
+                        >
+                          {`{{${v}}}`}
+                        </button>
+                      ))}
+                    </div>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Dear {{name}}, your contribution of Ksh {{amount}} is due on {{date}}. Please ensure timely payment."
+                        rows={5}
+                        data-testid="input-template-body"
+                        {...field}
+                        ref={(el) => {
+                          field.ref(el);
+                          textareaRef.current = el;
+                        }}
+                      />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">Click a tag above to insert it at the cursor position.</p>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }} />
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
                 <Button type="submit" disabled={createTemplate.isPending || updateTemplate.isPending} data-testid="button-save-template">

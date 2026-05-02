@@ -25,6 +25,23 @@ import {
 
 const router = Router();
 
+// ── Phone normalisation ───────────────────────────────────────────────────
+// Converts common Kenyan formats to E.164 (+254XXXXXXXXX).
+// Non-Kenyan numbers that already start with + are returned as-is.
+function normalizePhone(raw: string): string {
+  const trimmed = raw.trim();
+  const digits = trimmed.replace(/\D/g, "");
+  // Already E.164 with a + prefix
+  if (trimmed.startsWith("+")) return trimmed;
+  // 254XXXXXXXXX  →  +254XXXXXXXXX
+  if (digits.startsWith("254") && digits.length === 12) return "+" + digits;
+  // 0XXXXXXXXX (local Kenyan 10-digit)  →  +254XXXXXXXXX
+  if (digits.startsWith("0") && digits.length === 10) return "+254" + digits.slice(1);
+  // 7XXXXXXXX or 1XXXXXXXX (9 digits, Safaricom/Airtel)  →  +254XXXXXXXXX
+  if (digits.length === 9 && (digits.startsWith("7") || digits.startsWith("1"))) return "+254" + digits;
+  return trimmed;
+}
+
 // ── Contacts ──────────────────────────────────────────────────────────────
 
 router.get("/contacts", async (req, res) => {
@@ -109,10 +126,11 @@ router.post("/contacts/import", async (req, res) => {
 
   for (const c of body.contacts) {
     try {
+      const phone = normalizePhone(c.phone);
       const existing = await db
         .select({ id: contactsTable.id })
         .from(contactsTable)
-        .where(eq(contactsTable.phone, c.phone));
+        .where(eq(contactsTable.phone, phone));
       if (existing.length > 0) {
         duplicates++;
         continue;
@@ -121,7 +139,7 @@ router.post("/contacts/import", async (req, res) => {
         .insert(contactsTable)
         .values({
           name: c.name,
-          phone: c.phone,
+          phone,
           email: c.email ?? null,
           channel: c.channel,
           customFields: c.customFields ?? null,
@@ -150,7 +168,7 @@ router.post("/contacts", async (req, res) => {
     .insert(contactsTable)
     .values({
       name: body.name,
-      phone: body.phone,
+      phone: normalizePhone(body.phone),
       email: body.email ?? null,
       channel: body.channel,
       customFields: body.customFields ?? null,
@@ -221,7 +239,7 @@ router.put("/contacts/:id", async (req, res) => {
     .update(contactsTable)
     .set({
       name: body.name,
-      phone: body.phone,
+      phone: normalizePhone(body.phone),
       email: body.email ?? null,
       channel: body.channel,
       customFields: body.customFields ?? null,
