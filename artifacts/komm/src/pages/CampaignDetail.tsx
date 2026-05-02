@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import {
   ArrowLeft, CheckCircle2, XCircle, Clock, Send as SendIcon,
@@ -27,7 +27,9 @@ import {
   getListCampaignMessagesQueryKey,
   getListCampaignsQueryKey,
   getGetDashboardStatsQueryKey,
+  ListCampaignMessagesStatus,
 } from "@workspace/api-client-react";
+import type { ListCampaignMessagesStatus as MsgStatusType } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -47,6 +49,25 @@ const CAMPAIGN_STATUS_CLASS: Record<string, string> = {
   sending: "bg-blue-100 text-blue-800",
   failed: "bg-red-100 text-red-800",
 };
+
+function formatCountdown(isoTarget: string, now: Date): string {
+  const diff = new Date(isoTarget).getTime() - now.getTime();
+  if (diff <= 0) return "now";
+  const totalMins = Math.floor(diff / 60_000);
+  const days = Math.floor(totalMins / 1440);
+  const hours = Math.floor((totalMins % 1440) / 60);
+  const mins = totalMins % 60;
+  if (days > 0) return `in ${days}d ${hours}h`;
+  if (hours > 0) return `in ${hours}h ${mins}m`;
+  return `in ${mins}m`;
+}
+
+const MSG_STATUS_TABS: { label: string; value: MsgStatusType | "all" }[] = [
+  { label: "All", value: "all" },
+  { label: "Delivered", value: ListCampaignMessagesStatus.delivered },
+  { label: "Sent", value: ListCampaignMessagesStatus.sent },
+  { label: "Failed", value: ListCampaignMessagesStatus.failed },
+];
 
 export default function CampaignDetail() {
   const { id } = useParams<{ id: string }>();
@@ -89,19 +110,32 @@ export default function CampaignDetail() {
   });
 
   const [msgPage, setMsgPage] = useState(1);
+  const [msgStatus, setMsgStatus] = useState<MsgStatusType | "all">("all");
   const MSG_PAGE_SIZE = 50;
+
+  const msgParams = {
+    page: msgPage,
+    limit: MSG_PAGE_SIZE,
+    ...(msgStatus !== "all" ? { status: msgStatus } : {}),
+  };
 
   const { data: messages, isLoading: msgLoading } = useListCampaignMessages(
     campaignId,
-    { page: msgPage, limit: MSG_PAGE_SIZE },
+    msgParams,
     {
       query: {
         enabled: !!campaignId,
-        queryKey: getListCampaignMessagesQueryKey(campaignId, { page: msgPage, limit: MSG_PAGE_SIZE }),
+        queryKey: getListCampaignMessagesQueryKey(campaignId, msgParams),
         refetchInterval: campaign?.status === "sending" ? 5000 : false,
       },
     }
   );
+
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   const handleSend = () => {
     sendCampaign.mutate(
@@ -312,8 +346,14 @@ export default function CampaignDetail() {
         <CardContent>
           <p className="text-sm text-foreground whitespace-pre-wrap bg-muted/40 rounded-lg p-4">{campaign.body}</p>
           {campaign.scheduledAt && (
-            <p className="text-xs text-muted-foreground mt-2">
-              Scheduled for: {format(new Date(campaign.scheduledAt), "d MMM yyyy, HH:mm")}
+            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5" />
+              Scheduled for {format(new Date(campaign.scheduledAt), "d MMM yyyy, HH:mm")}
+              {campaign.status === "scheduled" && (
+                <span className="text-amber-700 font-medium">
+                  ({formatCountdown(campaign.scheduledAt, now)})
+                </span>
+              )}
             </p>
           )}
         </CardContent>
@@ -325,6 +365,23 @@ export default function CampaignDetail() {
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-semibold">Delivery Log</CardTitle>
             <span className="text-xs text-muted-foreground">{messages?.total ?? 0} messages</span>
+          </div>
+          {/* Status filter tabs */}
+          <div className="flex gap-1 mt-2">
+            {MSG_STATUS_TABS.map((tab) => (
+              <button
+                key={tab.value}
+                onClick={() => { setMsgStatus(tab.value); setMsgPage(1); }}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                  msgStatus === tab.value
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:bg-muted/70"
+                }`}
+                data-testid={`msg-filter-${tab.value}`}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
         </CardHeader>
 
@@ -354,7 +411,12 @@ export default function CampaignDetail() {
                 const StatusIcon = s.icon;
                 return (
                   <div key={msg.id} className="flex items-center gap-4 px-5 py-3">
-                    <span className="flex-1 text-sm font-medium truncate">{msg.contactName}</span>
+                    <Link
+                      href={`/contacts/${msg.contactId}`}
+                      className="flex-1 text-sm font-medium truncate hover:text-primary hover:underline"
+                    >
+                      {msg.contactName}
+                    </Link>
                     <span className="text-sm text-muted-foreground w-32">{msg.phone}</span>
                     <div className="flex items-center gap-1.5 w-24">
                       <StatusIcon className="w-3.5 h-3.5 shrink-0" />
