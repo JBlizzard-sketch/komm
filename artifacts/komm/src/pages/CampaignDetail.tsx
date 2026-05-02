@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useParams, useLocation } from "wouter";
 import {
   ArrowLeft, CheckCircle2, XCircle, Clock, Send as SendIcon,
-  Users, Copy, FlaskConical, Phone, Mail, CalendarOff, Edit2, ChevronLeft, ChevronRight,
+  Users, Copy, FlaskConical, Phone, Mail, CalendarOff, Edit2, ChevronLeft, ChevronRight, Loader2,
 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -81,7 +81,11 @@ export default function CampaignDetail() {
   };
 
   const { data: campaign, isLoading } = useGetCampaign(campaignId, {
-    query: { enabled: !!campaignId, queryKey: getGetCampaignQueryKey(campaignId) },
+    query: {
+      enabled: !!campaignId,
+      queryKey: getGetCampaignQueryKey(campaignId),
+      refetchInterval: (query) => query.state.data?.status === "sending" ? 5000 : false,
+    },
   });
 
   const [msgPage, setMsgPage] = useState(1);
@@ -94,6 +98,7 @@ export default function CampaignDetail() {
       query: {
         enabled: !!campaignId,
         queryKey: getListCampaignMessagesQueryKey(campaignId, { page: msgPage, limit: MSG_PAGE_SIZE }),
+        refetchInterval: campaign?.status === "sending" ? 5000 : false,
       },
     }
   );
@@ -168,6 +173,8 @@ export default function CampaignDetail() {
   const deliveryPct = campaign.deliveryRate ?? 0;
   const isDraft = campaign.status === "draft";
   const isScheduled = campaign.status === "scheduled";
+  const isSending = campaign.status === "sending";
+  const awaitingCount = Math.max(0, (campaign.recipientCount ?? 0) - (campaign.deliveredCount ?? 0) - (campaign.failedCount ?? 0));
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -247,7 +254,13 @@ export default function CampaignDetail() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      {isSending && (
+        <div className="flex items-center gap-2 mb-4 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+          <Loader2 className="w-3.5 h-3.5 text-blue-600 animate-spin shrink-0" />
+          <span className="text-xs text-blue-700 font-medium">Sending in progress — stats refresh automatically every 5 seconds</span>
+        </div>
+      )}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         <Card>
           <CardContent className="p-4 text-center">
             <p className="text-2xl font-bold text-foreground">{campaign.recipientCount.toLocaleString()}</p>
@@ -258,6 +271,12 @@ export default function CampaignDetail() {
           <CardContent className="p-4 text-center">
             <p className="text-2xl font-bold text-green-600">{campaign.deliveredCount ?? 0}</p>
             <p className="text-xs text-muted-foreground mt-1">Delivered</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 text-center">
+            <p className="text-2xl font-bold text-blue-600">{awaitingCount}</p>
+            <p className="text-xs text-muted-foreground mt-1">Awaiting</p>
           </CardContent>
         </Card>
         <Card>

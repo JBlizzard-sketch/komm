@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useLocation } from "wouter";
-import { ArrowLeft, Phone, Mail, Users, MessageSquare, Calendar, Edit2, Trash2 } from "lucide-react";
+import { ArrowLeft, Phone, Mail, Users, MessageSquare, Calendar, Edit2, Trash2, BellOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +9,7 @@ import {
   useGetContact, useDeleteContact, useListGroups,
   getListContactsQueryKey,
 } from "@workspace/api-client-react";
+import { ContactFormDialog } from "@/components/ContactFormDialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -47,6 +48,7 @@ export default function ContactDetail() {
 
   const [messages, setMessages] = useState<ContactMessage[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
 
   const { data: contact, isLoading } = useGetContact(contactId, {
     query: {
@@ -121,7 +123,14 @@ export default function ContactDetail() {
           </Button>
         </Link>
         <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-semibold truncate">{contact.name}</h1>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-xl font-semibold truncate">{contact.name}</h1>
+            {(contact as { optedOut?: boolean }).optedOut && (
+              <Badge variant="outline" className="text-[11px] bg-red-50 text-red-700 border-red-200 gap-1 shrink-0">
+                <BellOff className="w-3 h-3" />Opted Out
+              </Badge>
+            )}
+          </div>
           <p className="text-sm text-muted-foreground mt-0.5">
             Added {format(new Date(contact.createdAt), "d MMM yyyy")}
           </p>
@@ -137,6 +146,16 @@ export default function ContactDetail() {
           >
             <Trash2 className="w-4 h-4" />
             Delete
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => setShowEdit(true)}
+            data-testid="button-edit-contact"
+          >
+            <Edit2 className="w-4 h-4" />
+            Edit
           </Button>
           <Link href={`/campaigns/new`}>
             <Button size="sm" className="gap-2">
@@ -293,6 +312,14 @@ export default function ContactDetail() {
           )}
         </CardContent>
       </Card>
+
+      {/* Edit Contact Dialog */}
+      <ContactFormDialog
+        open={showEdit}
+        onClose={() => setShowEdit(false)}
+        editContact={contact as Parameters<typeof ContactFormDialog>[0]["editContact"]}
+        groups={(allGroups ?? []).map((g) => ({ id: g.id, name: g.name, contactCount: g.contactCount ?? 0 }))}
+      />
     </div>
   );
 }
