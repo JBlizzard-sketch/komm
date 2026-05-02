@@ -19,7 +19,7 @@ import {
   getListCampaignsQueryKey, getGetDashboardStatsQueryKey, getGetDashboardActivityQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { format, formatDistanceToNow, isPast } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import type { Campaign } from "@workspace/api-client-react";
 
@@ -119,13 +119,20 @@ function CampaignRow({ campaign }: { campaign: Campaign }) {
         {campaign.recipientCount.toLocaleString()} rcpts
       </span>
 
-      <span className="text-xs text-muted-foreground shrink-0 w-28 text-right">
-        {campaign.sentAt
-          ? format(new Date(campaign.sentAt), "MMM d, HH:mm")
-          : campaign.scheduledAt
-          ? format(new Date(campaign.scheduledAt), "MMM d, HH:mm")
-          : format(new Date(campaign.createdAt), "MMM d, HH:mm")}
-      </span>
+      <div className="text-right shrink-0 w-32">
+        <p className="text-xs text-muted-foreground">
+          {campaign.sentAt
+            ? format(new Date(campaign.sentAt), "MMM d, HH:mm")
+            : campaign.scheduledAt
+            ? format(new Date(campaign.scheduledAt), "MMM d, HH:mm")
+            : format(new Date(campaign.createdAt), "MMM d, HH:mm")}
+        </p>
+        {campaign.status === "scheduled" && campaign.scheduledAt && !isPast(new Date(campaign.scheduledAt)) && (
+          <p className="text-[10px] text-amber-600 font-medium mt-0.5">
+            in {formatDistanceToNow(new Date(campaign.scheduledAt))}
+          </p>
+        )}
+      </div>
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

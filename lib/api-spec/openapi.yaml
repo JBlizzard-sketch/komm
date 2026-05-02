@@ -1021,6 +1021,9 @@ components:
           enum: [draft, scheduled, sending, sent, failed]
         body:
           type: string
+        subject:
+          type: string
+          nullable: true
         templateId:
           type: integer
           nullable: true
@@ -1071,6 +1074,9 @@ components:
           enum: [sms, whatsapp, email]
         body:
           type: string
+        subject:
+          type: string
+          nullable: true
         templateId:
           type: integer
           nullable: true

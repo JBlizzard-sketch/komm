@@ -449,6 +449,12 @@ export default function CampaignDetail() {
           </div>
         </CardHeader>
         <CardContent>
+          {campaign.subject && (
+            <div className="flex items-center gap-2 mb-3 px-4 py-2 bg-muted/40 rounded-lg">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0">Subject</span>
+              <span className="text-sm font-medium text-foreground truncate">{campaign.subject}</span>
+            </div>
+          )}
           <p className="text-sm text-foreground whitespace-pre-wrap bg-muted/40 rounded-lg p-4">{campaign.body}</p>
           {campaign.scheduledAt && (
             <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">

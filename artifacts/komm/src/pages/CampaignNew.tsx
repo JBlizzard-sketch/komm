@@ -27,6 +27,7 @@ import { format } from "date-fns";
 const schema = z.object({
   name: z.string().min(1, "Campaign name is required"),
   channel: z.enum(["sms", "whatsapp", "email"]),
+  subject: z.string().optional(),
   body: z.string().min(1, "Message body is required"),
   templateId: z.number().nullable().optional(),
   groupIds: z.array(z.number()),
@@ -135,6 +136,7 @@ export default function CampaignNew() {
     defaultValues: {
       name: "",
       channel: fromChannel || "sms",
+      subject: "",
       body: "",
       templateId: null,
       groupIds: [],
@@ -166,6 +168,7 @@ export default function CampaignNew() {
       form.reset({
         name: existingCampaign.name,
         channel: existingCampaign.channel as "sms" | "whatsapp" | "email",
+        subject: existingCampaign.subject ?? "",
         body: existingCampaign.body ?? "",
         templateId: existingCampaign.templateId ?? null,
         groupIds: existingCampaign.groupIds ?? [],
@@ -245,6 +248,7 @@ export default function CampaignNew() {
       name: values.name,
       channel: values.channel,
       body: values.body,
+      subject: values.channel === "email" && values.subject ? values.subject : null,
       templateId: values.templateId ?? null,
       groupIds: values.groupIds,
       scheduledAt: values.scheduledAt ? new Date(values.scheduledAt).toISOString() : null,
@@ -335,6 +339,22 @@ export default function CampaignNew() {
               ))}
             </div>
           </div>
+
+          {channel === "email" && (
+            <FormField control={form.control} name="subject" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Email Subject <span className="text-muted-foreground font-normal">(required for email)</span></FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="e.g. June Contribution Reminder — Umoja SACCO"
+                    data-testid="input-email-subject"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
+          )}
 
           <div>
             <Label className="text-sm font-medium">Template (optional)</Label>

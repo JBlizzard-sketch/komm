@@ -186,6 +186,7 @@ export interface Campaign {
   channel: CampaignChannel;
   status: CampaignStatus;
   body?: string;
+  subject?: string | null;
   templateId?: number | null;
   groupIds?: number[];
   recipientCount: number;
@@ -216,6 +217,7 @@ export interface CreateCampaignBody {
   name: string;
   channel: CreateCampaignBodyChannel;
   body: string;
+  subject?: string | null;
   templateId?: number | null;
   groupIds?: number[];
   scheduledAt?: string | null;

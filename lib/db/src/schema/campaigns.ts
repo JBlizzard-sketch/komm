@@ -9,6 +9,7 @@ export const campaignsTable = pgTable("campaigns", {
   channel: text("channel").notNull().default("sms"),
   status: text("status").notNull().default("draft"),
   body: text("body").notNull(),
+  subject: text("subject"),
   templateId: integer("template_id").references(() => templatesTable.id, { onDelete: "set null" }),
   groupIds: integer("group_ids").array().notNull().default([]),
   recipientCount: integer("recipient_count").notNull().default(0),

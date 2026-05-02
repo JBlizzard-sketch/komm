@@ -153,6 +153,14 @@ export default function Reports() {
     .sort((a, b) => b.recipientCount - a.recipientCount)
     .slice(0, 8);
 
+  const COST_PER_MSG: Record<string, number> = { sms: 1.2, whatsapp: 0.5, email: 0 };
+  const costByChannel = (breakdown ?? []).map((b) => ({
+    channel: b.channel,
+    count: b.count,
+    cost: (COST_PER_MSG[b.channel] ?? 0) * b.count,
+  }));
+  const totalCost = costByChannel.reduce((s, c) => s + c.cost, 0);
+
   const totalSent = (breakdown ?? []).reduce((s, b) => s + b.count, 0);
   const rangeLabel = RANGE_OPTIONS.find((r) => r.days === days)?.label ?? `${days} days`;
 
@@ -453,6 +461,46 @@ export default function Reports() {
           )}
         </CardContent>
       </Card>
+
+      {/* Cost Estimate Card */}
+      {(breakdown ?? []).length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-sm font-semibold">Estimated Send Cost</CardTitle>
+                <CardDescription className="text-xs mt-0.5">Based on Africa's Talking (SMS KES 1.20/msg), WhatsApp Cloud API (KES 0.50/msg), Email free — last {rangeLabel}</CardDescription>
+              </div>
+              <p className="text-xl font-bold text-primary shrink-0">KES {totalCost.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {costByChannel.map((c) => {
+                const Icon = CHANNEL_ICONS[c.channel] ?? MessageSquare;
+                return (
+                  <div key={c.channel} className="flex items-center gap-3 bg-muted/40 rounded-lg px-4 py-3">
+                    <div className="w-8 h-8 rounded-lg bg-background border border-border flex items-center justify-center shrink-0">
+                      <Icon className="w-4 h-4 text-muted-foreground" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-muted-foreground">{CHANNEL_LABELS[c.channel] ?? c.channel}</p>
+                      <p className="text-sm font-semibold">{c.count.toLocaleString()} msgs</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      {c.cost > 0 ? (
+                        <p className="text-sm font-bold text-primary">KES {c.cost.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                      ) : (
+                        <p className="text-sm font-medium text-green-600">Free</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
