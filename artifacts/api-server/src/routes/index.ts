@@ -7,6 +7,7 @@ import inboxRouter from "./inbox";
 import dashboardRouter from "./dashboard";
 import webhooksRouter from "./webhooks";
 import settingsRouter from "./settings";
+import reportsRouter from "./reports";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(inboxRouter);
 router.use(dashboardRouter);
 router.use(webhooksRouter);
 router.use(settingsRouter);
+router.use(reportsRouter);
 
 export default router;

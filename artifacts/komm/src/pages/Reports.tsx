@@ -1,8 +1,11 @@
-import { useState } from "react";
 import { Link } from "wouter";
-import { BarChart2, TrendingUp, Send, Users, CheckCircle2, MessageSquare, Mail, Smartphone, ArrowRight } from "lucide-react";
+import {
+  BarChart2, TrendingUp, Send, Users, CheckCircle2,
+  MessageSquare, Mail, Smartphone, ArrowRight, Download,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ResponsiveContainer,
@@ -20,11 +23,25 @@ import {
   Cell,
 } from "recharts";
 import { useQuery } from "@tanstack/react-query";
-import { useGetDashboardStats, useListCampaigns, getGetDashboardStatsQueryKey, getListCampaignsQueryKey } from "@workspace/api-client-react";
+import {
+  useGetDashboardStats,
+  getGetDashboardStatsQueryKey,
+} from "@workspace/api-client-react";
 import { format, parseISO } from "date-fns";
 
 interface TrendPoint { date: string; sms: number; whatsapp: number; email: number }
 interface ChannelBreakdown { channel: string; count: number; percentage: number }
+interface ReportCampaign {
+  id: number;
+  name: string;
+  channel: string;
+  status: string;
+  recipientCount: number;
+  deliveredCount: number;
+  failedCount: number;
+  deliveryRate: number;
+  sentAt: string | null;
+}
 
 const CHANNEL_COLORS: Record<string, string> = {
   sms: "hsl(153 58% 28%)",
@@ -32,13 +49,22 @@ const CHANNEL_COLORS: Record<string, string> = {
   email: "#6366f1",
 };
 const CHANNEL_LABELS: Record<string, string> = { sms: "SMS", whatsapp: "WhatsApp", email: "Email" };
-const CHANNEL_ICONS: Record<string, React.ElementType> = { sms: Smartphone, whatsapp: MessageSquare, email: Mail };
+const CHANNEL_ICONS: Record<string, React.ElementType> = {
+  sms: Smartphone,
+  whatsapp: MessageSquare,
+  email: Mail,
+};
 
 function fmt(d: string) {
   try { return format(parseISO(d), "d MMM"); } catch { return d; }
 }
 
-function StatCard({ label, value, sub, icon: Icon, iconClass }: { label: string; value: string | number; sub?: string; icon: React.ElementType; iconClass: string }) {
+function StatCard({
+  label, value, sub, icon: Icon, iconClass,
+}: {
+  label: string; value: string | number; sub?: string;
+  icon: React.ElementType; iconClass: string;
+}) {
   return (
     <Card>
       <CardContent className="p-5">
@@ -55,15 +81,50 @@ function StatCard({ label, value, sub, icon: Icon, iconClass }: { label: string;
   );
 }
 
+function DeliveryBar({ rate }: { rate: number }) {
+  const color = rate >= 80 ? "bg-green-500" : rate >= 50 ? "bg-amber-500" : "bg-red-500";
+  return (
+    <div className="flex items-center gap-2 min-w-0">
+      <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${rate}%` }} />
+      </div>
+      <span className="text-xs font-medium w-9 text-right shrink-0">{rate}%</span>
+    </div>
+  );
+}
+
+function exportCSV(campaigns: ReportCampaign[]) {
+  const header = "Campaign,Channel,Recipients,Delivered,Failed,Delivery Rate,Sent At";
+  const rows = campaigns.map((c) =>
+    [
+      `"${c.name.replace(/"/g, '""')}"`,
+      c.channel,
+      c.recipientCount,
+      c.deliveredCount,
+      c.failedCount,
+      `${c.deliveryRate}%`,
+      c.sentAt ? format(new Date(c.sentAt), "yyyy-MM-dd HH:mm") : "",
+    ].join(",")
+  );
+  const blob = new Blob([[header, ...rows].join("\n")], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `komm-reports-${format(new Date(), "yyyy-MM-dd")}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function Reports() {
   const { data: stats, isLoading: statsLoading } = useGetDashboardStats({
     query: { queryKey: getGetDashboardStatsQueryKey(), staleTime: 60_000 },
   });
 
-  const { data: campaignsData, isLoading: campaignsLoading } = useListCampaigns(
-    { page: 1, limit: 20 },
-    { query: { queryKey: getListCampaignsQueryKey({ page: 1, limit: 20 }), staleTime: 60_000 } }
-  );
+  const { data: reportCampaigns, isLoading: reportLoading } = useQuery<ReportCampaign[]>({
+    queryKey: ["reports", "campaigns"],
+    queryFn: () => fetch("/api/reports/campaigns").then((r) => r.json()),
+    staleTime: 60_000,
+  });
 
   const { data: trend, isLoading: trendLoading } = useQuery<TrendPoint[]>({
     queryKey: ["dashboard", "delivery-trend"],
@@ -77,25 +138,38 @@ export default function Reports() {
     staleTime: 60_000,
   });
 
-  const sentCampaigns = (campaignsData?.data ?? [])
-    .filter((c) => c.status === "sent" && c.recipientCount > 0)
+  const topByReach = (reportCampaigns ?? [])
+    .slice()
     .sort((a, b) => b.recipientCount - a.recipientCount)
     .slice(0, 8);
 
-  const totalMessages = (trend ?? []).reduce((s, p) => s + p.sms + p.whatsapp + p.email, 0);
   const totalSent = (breakdown ?? []).reduce((s, b) => s + b.count, 0);
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold flex items-center gap-2">
-          <BarChart2 className="w-5 h-5 text-muted-foreground" />
-          Reports
-        </h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Delivery analytics for the last 30 days
-        </p>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-xl font-semibold flex items-center gap-2">
+            <BarChart2 className="w-5 h-5 text-muted-foreground" />
+            Reports
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Delivery analytics for the last 30 days
+          </p>
+        </div>
+        {(reportCampaigns ?? []).length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => exportCSV(reportCampaigns!)}
+            data-testid="button-export-csv"
+          >
+            <Download className="w-4 h-4" />
+            Export CSV
+          </Button>
+        )}
       </div>
 
       {/* Summary cards */}
@@ -112,7 +186,7 @@ export default function Reports() {
         )}
       </div>
 
-      {/* Delivery trend */}
+      {/* Delivery trend chart */}
       <Card className="mb-5">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-semibold">Messages Sent — Last 30 Days</CardTitle>
@@ -122,7 +196,9 @@ export default function Reports() {
           {trendLoading ? (
             <Skeleton className="h-52 w-full" />
           ) : !trend || trend.length === 0 ? (
-            <div className="h-52 flex items-center justify-center text-sm text-muted-foreground">No messages in the last 30 days.</div>
+            <div className="h-52 flex items-center justify-center text-sm text-muted-foreground">
+              No messages in the last 30 days.
+            </div>
           ) : (
             <ResponsiveContainer width="100%" height={210}>
               <AreaChart data={trend} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
@@ -159,7 +235,7 @@ export default function Reports() {
 
       {/* Channel breakdown + top campaigns */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 mb-5">
-        {/* Channel pie */}
+        {/* Pie */}
         <Card className="lg:col-span-2">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold">Channel Breakdown</CardTitle>
@@ -174,7 +250,16 @@ export default function Reports() {
               <>
                 <ResponsiveContainer width="100%" height={160}>
                   <PieChart>
-                    <Pie data={breakdown} dataKey="count" nameKey="channel" cx="50%" cy="50%" outerRadius={68} innerRadius={38} paddingAngle={3}>
+                    <Pie
+                      data={breakdown}
+                      dataKey="count"
+                      nameKey="channel"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={68}
+                      innerRadius={38}
+                      paddingAngle={3}
+                    >
                       {breakdown.map((b) => (
                         <Cell key={b.channel} fill={CHANNEL_COLORS[b.channel] ?? "#999"} />
                       ))}
@@ -190,10 +275,15 @@ export default function Reports() {
                     const Icon = CHANNEL_ICONS[b.channel] ?? MessageSquare;
                     return (
                       <div key={b.channel} className="flex items-center gap-2 text-sm">
-                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: CHANNEL_COLORS[b.channel] ?? "#999" }} />
+                        <span
+                          className="w-2.5 h-2.5 rounded-full shrink-0"
+                          style={{ background: CHANNEL_COLORS[b.channel] ?? "#999" }}
+                        />
                         <Icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                         <span className="font-medium capitalize">{CHANNEL_LABELS[b.channel] ?? b.channel}</span>
-                        <span className="ml-auto text-muted-foreground">{b.count.toLocaleString()} ({b.percentage}%)</span>
+                        <span className="ml-auto text-muted-foreground">
+                          {b.count.toLocaleString()} ({b.percentage}%)
+                        </span>
                       </div>
                     );
                   })}
@@ -208,30 +298,38 @@ export default function Reports() {
           </CardContent>
         </Card>
 
-        {/* Top campaigns by reach */}
+        {/* Bar: top by reach */}
         <Card className="lg:col-span-3">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold">Top Campaigns by Reach</CardTitle>
             <CardDescription className="text-xs">Sent campaigns, sorted by recipient count</CardDescription>
           </CardHeader>
           <CardContent>
-            {campaignsLoading ? (
+            {reportLoading ? (
               <Skeleton className="h-52 w-full" />
-            ) : sentCampaigns.length === 0 ? (
-              <div className="h-52 flex items-center justify-center text-sm text-muted-foreground">No sent campaigns yet.</div>
+            ) : topByReach.length === 0 ? (
+              <div className="h-52 flex items-center justify-center text-sm text-muted-foreground">
+                No sent campaigns yet.
+              </div>
             ) : (
               <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={sentCampaigns} layout="vertical" margin={{ top: 0, right: 8, bottom: 0, left: 0 }}>
+                <BarChart data={topByReach} layout="vertical" margin={{ top: 0, right: 8, bottom: 0, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" />
                   <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                  <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v: string) => v.length > 18 ? v.slice(0, 16) + "…" : v} />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={110}
+                    tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                    tickFormatter={(v: string) => v.length > 18 ? v.slice(0, 16) + "…" : v}
+                  />
                   <Tooltip
                     contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid hsl(var(--border))" }}
                     formatter={(v) => [`${v} recipients`, "Reach"]}
                     labelStyle={{ fontWeight: 600 }}
                   />
                   <Bar dataKey="recipientCount" name="Recipients" radius={[0, 4, 4, 0]}>
-                    {sentCampaigns.map((c) => (
+                    {topByReach.map((c) => (
                       <Cell key={c.id} fill={CHANNEL_COLORS[c.channel] ?? "hsl(var(--primary))"} />
                     ))}
                   </Bar>
@@ -242,13 +340,15 @@ export default function Reports() {
         </Card>
       </div>
 
-      {/* Campaign table */}
+      {/* Campaign performance table */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-sm font-semibold">Campaign Performance</CardTitle>
-              <CardDescription className="text-xs mt-0.5">Recent sent campaigns with delivery stats</CardDescription>
+              <CardDescription className="text-xs mt-0.5">
+                Sent campaigns with delivery stats
+              </CardDescription>
             </div>
             <Link href="/campaigns">
               <button className="flex items-center gap-1 text-xs text-primary hover:underline font-medium">
@@ -258,45 +358,59 @@ export default function Reports() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          {campaignsLoading ? (
+          {reportLoading ? (
             <div className="p-4 space-y-3">
-              {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+              {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
             </div>
-          ) : sentCampaigns.length === 0 ? (
+          ) : (reportCampaigns ?? []).length === 0 ? (
             <div className="py-10 text-center text-muted-foreground text-sm">
               No sent campaigns yet.{" "}
-              <Link href="/campaigns/new" className="text-primary hover:underline">Create your first campaign</Link>
+              <Link href="/campaigns/new" className="text-primary hover:underline">
+                Create your first campaign
+              </Link>
             </div>
           ) : (
             <div className="divide-y divide-border">
-              {/* Header */}
+              {/* Table header */}
               <div className="grid grid-cols-12 px-5 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wide bg-muted/40">
-                <span className="col-span-5">Campaign</span>
+                <span className="col-span-4">Campaign</span>
                 <span className="col-span-2 text-center">Channel</span>
-                <span className="col-span-2 text-right">Recipients</span>
-                <span className="col-span-2 text-right">Sent</span>
+                <span className="col-span-1 text-right">Sent</span>
+                <span className="col-span-1 text-right">Delivered</span>
+                <span className="col-span-1 text-right">Failed</span>
+                <span className="col-span-2 pl-2">Delivery Rate</span>
                 <span className="col-span-1" />
               </div>
-              {sentCampaigns.map((c) => {
+              {(reportCampaigns ?? []).map((c) => {
                 const Icon = CHANNEL_ICONS[c.channel] ?? MessageSquare;
                 return (
                   <Link key={c.id} href={`/campaigns/${c.id}`}>
                     <div className="grid grid-cols-12 px-5 py-3 items-center hover:bg-muted/20 transition-colors cursor-pointer">
-                      <div className="col-span-5 min-w-0">
+                      <div className="col-span-4 min-w-0 pr-3">
                         <p className="text-sm font-medium truncate">{c.name}</p>
                         {c.sentAt && (
-                          <p className="text-xs text-muted-foreground">{format(new Date(c.sentAt), "d MMM yyyy")}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {format(new Date(c.sentAt), "d MMM yyyy")}
+                          </p>
                         )}
                       </div>
                       <div className="col-span-2 flex justify-center">
-                        <Badge variant="outline" className="text-[10px] capitalize gap-1">
+                        <Badge variant="outline" className="text-[10px] capitalize gap-1 shrink-0">
                           <Icon className="w-3 h-3" />
                           {CHANNEL_LABELS[c.channel] ?? c.channel}
                         </Badge>
                       </div>
-                      <p className="col-span-2 text-sm text-right">{c.recipientCount.toLocaleString()}</p>
-                      <div className="col-span-2 flex justify-end">
-                        <Badge variant="outline" className="text-[10px] bg-green-50 text-green-800 border-green-200">Sent</Badge>
+                      <p className="col-span-1 text-sm text-right text-muted-foreground">
+                        {c.recipientCount.toLocaleString()}
+                      </p>
+                      <p className="col-span-1 text-sm text-right text-green-700 font-medium">
+                        {c.deliveredCount.toLocaleString()}
+                      </p>
+                      <p className="col-span-1 text-sm text-right text-red-600">
+                        {c.failedCount > 0 ? c.failedCount.toLocaleString() : <span className="text-muted-foreground">—</span>}
+                      </p>
+                      <div className="col-span-2 pl-2">
+                        <DeliveryBar rate={c.deliveryRate} />
                       </div>
                       <div className="col-span-1 flex justify-end">
                         <ArrowRight className="w-3.5 h-3.5 text-muted-foreground" />
