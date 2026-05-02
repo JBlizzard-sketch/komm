@@ -85,8 +85,9 @@ router.get("/dashboard/activity", async (req, res) => {
 });
 
 router.get("/dashboard/delivery-trend", async (req, res) => {
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const days = Math.min(365, Math.max(1, parseInt(String(req.query.days ?? "30"), 10) || 30));
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
 
   const rows = await db
     .select({
@@ -96,7 +97,7 @@ router.get("/dashboard/delivery-trend", async (req, res) => {
     })
     .from(campaignMessagesTable)
     .leftJoin(campaignsTable, eq(campaignMessagesTable.campaignId, campaignsTable.id))
-    .where(gte(campaignMessagesTable.createdAt, thirtyDaysAgo))
+    .where(gte(campaignMessagesTable.createdAt, cutoff))
     .groupBy(
       sql`date_trunc('day', ${campaignMessagesTable.createdAt})::date`,
       campaignsTable.channel
@@ -120,6 +121,10 @@ router.get("/dashboard/delivery-trend", async (req, res) => {
 });
 
 router.get("/dashboard/channel-breakdown", async (req, res) => {
+  const days = Math.min(365, Math.max(1, parseInt(String(req.query.days ?? "30"), 10) || 30));
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+
   const rows = await db
     .select({
       channel: campaignsTable.channel,
@@ -127,6 +132,7 @@ router.get("/dashboard/channel-breakdown", async (req, res) => {
     })
     .from(campaignMessagesTable)
     .leftJoin(campaignsTable, eq(campaignMessagesTable.campaignId, campaignsTable.id))
+    .where(gte(campaignMessagesTable.createdAt, cutoff))
     .groupBy(campaignsTable.channel);
 
   const total = rows.reduce((sum, r) => sum + r.count, 0);

@@ -1,19 +1,23 @@
 import { Router } from "express";
 import { db, campaignsTable, campaignMessagesTable } from "@workspace/db";
-import { eq, sql, inArray } from "drizzle-orm";
+import { eq, sql, inArray, gte, and } from "drizzle-orm";
 
 const router = Router();
 
 /**
  * GET /reports/campaigns
  * Returns sent campaigns enriched with delivery stats.
- * Lighter than fetching each campaign individually.
+ * Accepts optional ?days= to filter by sentAt recency.
  */
-router.get("/reports/campaigns", async (_req, res) => {
+router.get("/reports/campaigns", async (req, res) => {
+  const days = Math.min(365, Math.max(1, parseInt(String(req.query.days ?? "30"), 10) || 30));
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+
   const campaigns = await db
     .select()
     .from(campaignsTable)
-    .where(eq(campaignsTable.status, "sent"))
+    .where(and(eq(campaignsTable.status, "sent"), gte(campaignsTable.sentAt, cutoff)))
     .orderBy(sql`${campaignsTable.sentAt} DESC`)
     .limit(50);
 

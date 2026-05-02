@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import {
   ArrowLeft, CheckCircle2, XCircle, Clock, Send as SendIcon,
-  Users, Copy, FlaskConical, Phone, Mail, CalendarOff, Edit2, ChevronLeft, ChevronRight, Loader2,
+  Users, Copy, FlaskConical, Phone, Mail, CalendarOff, Edit2, ChevronLeft, ChevronRight, Loader2, Download,
 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -136,6 +136,30 @@ export default function CampaignDetail() {
     const id = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(id);
   }, []);
+
+  const [exporting, setExporting] = useState(false);
+  const handleExportCSV = async () => {
+    setExporting(true);
+    try {
+      const statusParam = msgStatus !== "all" ? `&status=${msgStatus}` : "";
+      const res = await fetch(`/api/campaigns/${campaignId}/messages?page=1&limit=5000${statusParam}`);
+      const json = await res.json() as { data: Array<{ contactName: string; phone: string; status: string; deliveredAt: string | null }> };
+      const rows = json.data ?? [];
+      const header = "Name,Phone,Status,Delivered At";
+      const lines = rows.map((m) =>
+        [`"${m.contactName.replace(/"/g, '""')}"`, m.phone, m.status, m.deliveredAt ? format(new Date(m.deliveredAt), "yyyy-MM-dd HH:mm") : ""].join(",")
+      );
+      const blob = new Blob([[header, ...lines].join("\n")], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `campaign-${campaignId}-delivery${msgStatus !== "all" ? `-${msgStatus}` : ""}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const handleSend = () => {
     sendCampaign.mutate(
@@ -366,22 +390,37 @@ export default function CampaignDetail() {
             <CardTitle className="text-sm font-semibold">Delivery Log</CardTitle>
             <span className="text-xs text-muted-foreground">{messages?.total ?? 0} messages</span>
           </div>
-          {/* Status filter tabs */}
-          <div className="flex gap-1 mt-2">
-            {MSG_STATUS_TABS.map((tab) => (
-              <button
-                key={tab.value}
-                onClick={() => { setMsgStatus(tab.value); setMsgPage(1); }}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                  msgStatus === tab.value
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:bg-muted/70"
-                }`}
-                data-testid={`msg-filter-${tab.value}`}
+          {/* Status filter tabs + export */}
+          <div className="flex items-center justify-between gap-2 mt-2">
+            <div className="flex gap-1">
+              {MSG_STATUS_TABS.map((tab) => (
+                <button
+                  key={tab.value}
+                  onClick={() => { setMsgStatus(tab.value); setMsgPage(1); }}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    msgStatus === tab.value
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:bg-muted/70"
+                  }`}
+                  data-testid={`msg-filter-${tab.value}`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            {(messages?.total ?? 0) > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1.5 text-xs shrink-0"
+                onClick={handleExportCSV}
+                disabled={exporting}
+                data-testid="button-export-delivery-log"
               >
-                {tab.label}
-              </button>
-            ))}
+                <Download className="w-3 h-3" />
+                {exporting ? "Exporting…" : "Export CSV"}
+              </Button>
+            )}
           </div>
         </CardHeader>
 

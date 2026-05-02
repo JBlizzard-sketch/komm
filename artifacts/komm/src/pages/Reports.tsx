@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "wouter";
 import {
   BarChart2, TrendingUp, Send, Users, CheckCircle2,
@@ -115,26 +116,35 @@ function exportCSV(campaigns: ReportCampaign[]) {
   URL.revokeObjectURL(url);
 }
 
+const RANGE_OPTIONS = [
+  { label: "7 days",   days: 7 },
+  { label: "30 days",  days: 30 },
+  { label: "90 days",  days: 90 },
+  { label: "12 months", days: 365 },
+];
+
 export default function Reports() {
+  const [days, setDays] = useState(30);
+
   const { data: stats, isLoading: statsLoading } = useGetDashboardStats({
     query: { queryKey: getGetDashboardStatsQueryKey(), staleTime: 60_000 },
   });
 
   const { data: reportCampaigns, isLoading: reportLoading } = useQuery<ReportCampaign[]>({
-    queryKey: ["reports", "campaigns"],
-    queryFn: () => fetch("/api/reports/campaigns").then((r) => r.json()),
+    queryKey: ["reports", "campaigns", days],
+    queryFn: () => fetch(`/api/reports/campaigns?days=${days}`).then((r) => r.json()),
     staleTime: 60_000,
   });
 
   const { data: trend, isLoading: trendLoading } = useQuery<TrendPoint[]>({
-    queryKey: ["dashboard", "delivery-trend"],
-    queryFn: () => fetch("/api/dashboard/delivery-trend").then((r) => r.json()),
+    queryKey: ["dashboard", "delivery-trend", days],
+    queryFn: () => fetch(`/api/dashboard/delivery-trend?days=${days}`).then((r) => r.json()),
     staleTime: 60_000,
   });
 
   const { data: breakdown, isLoading: breakdownLoading } = useQuery<ChannelBreakdown[]>({
-    queryKey: ["dashboard", "channel-breakdown"],
-    queryFn: () => fetch("/api/dashboard/channel-breakdown").then((r) => r.json()),
+    queryKey: ["dashboard", "channel-breakdown", days],
+    queryFn: () => fetch(`/api/dashboard/channel-breakdown?days=${days}`).then((r) => r.json()),
     staleTime: 60_000,
   });
 
@@ -144,32 +154,52 @@ export default function Reports() {
     .slice(0, 8);
 
   const totalSent = (breakdown ?? []).reduce((s, b) => s + b.count, 0);
+  const rangeLabel = RANGE_OPTIONS.find((r) => r.days === days)?.label ?? `${days} days`;
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-start justify-between mb-6 gap-4 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold flex items-center gap-2">
             <BarChart2 className="w-5 h-5 text-muted-foreground" />
             Reports
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Delivery analytics for the last 30 days
+            Delivery analytics — last {rangeLabel}
           </p>
         </div>
-        {(reportCampaigns ?? []).length > 0 && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-2"
-            onClick={() => exportCSV(reportCampaigns!)}
-            data-testid="button-export-csv"
-          >
-            <Download className="w-4 h-4" />
-            Export CSV
-          </Button>
-        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Date range picker */}
+          <div className="flex rounded-md border border-border overflow-hidden">
+            {RANGE_OPTIONS.map((opt) => (
+              <button
+                key={opt.days}
+                onClick={() => setDays(opt.days)}
+                data-testid={`range-${opt.days}`}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                  days === opt.days
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-background text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          {(reportCampaigns ?? []).length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => exportCSV(reportCampaigns!)}
+              data-testid="button-export-csv"
+            >
+              <Download className="w-4 h-4" />
+              Export CSV
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Summary cards */}
