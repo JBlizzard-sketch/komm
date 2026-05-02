@@ -383,7 +383,6 @@ export default function CampaignDetail() {
           </div>
         </div>
       )}
-      </Card>
 
       {/* Send Test Dialog */}
       <Dialog open={showTest} onOpenChange={setShowTest}>
