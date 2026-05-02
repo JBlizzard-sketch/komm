@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo } from "react";
-import { Plus, FileText, Trash2, Edit2, Tag, Send, Eye } from "lucide-react";
+import { Plus, FileText, Trash2, Edit2, Tag, Send, Eye, Copy, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -71,6 +71,7 @@ function highlightVariables(text: string) {
 export default function Templates() {
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [channelFilter, setChannelFilter] = useState<string>("all");
+  const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [editTemplate, setEditTemplate] = useState<Template | null>(null);
   const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null);
@@ -149,6 +150,20 @@ export default function Templates() {
     );
   };
 
+  const handleDuplicate = (t: Template) => {
+    const vars = t.variables ?? [];
+    createTemplate.mutate(
+      { data: { name: `${t.name} (copy)`, body: t.body, channel: t.channel as "sms" | "whatsapp" | "email", category: t.category as "sacco" | "church" | "general", variables: vars } },
+      { onSuccess: () => { qc.invalidateQueries({ queryKey: getListTemplatesQueryKey() }); toast({ title: "Template duplicated" }); } }
+    );
+  };
+
+  const filtered = useMemo(() => {
+    if (!templates || !search.trim()) return templates ?? [];
+    const q = search.trim().toLowerCase();
+    return templates.filter((t) => t.name.toLowerCase().includes(q) || t.body.toLowerCase().includes(q));
+  }, [templates, search]);
+
   const useInCampaign = (t: Template) => {
     navigate(`/campaigns/new?channel=${t.channel}&templateId=${t.id}`);
   };
@@ -180,8 +195,19 @@ export default function Templates() {
         </Button>
       </div>
 
-      {/* Filters */}
-      <div className="flex gap-3 mb-4">
+      {/* Search + Filters */}
+      <div className="flex flex-wrap gap-3 mb-4">
+        <div className="relative flex-1 min-w-[180px]">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search templates…"
+            className="h-8 w-full rounded-md border border-input bg-background px-3 pl-8 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            data-testid="search-templates"
+          />
+        </div>
         <Select value={categoryFilter} onValueChange={setCategoryFilter}>
           <SelectTrigger className="w-36 h-8 text-sm" data-testid="filter-category">
             <SelectValue placeholder="All categories" />
@@ -222,9 +248,15 @@ export default function Templates() {
             Create Template
           </Button>
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-16">
+          <Search className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
+          <p className="text-sm font-medium text-foreground">No templates match "{search}"</p>
+          <button onClick={() => setSearch("")} className="text-xs text-primary hover:underline mt-1">Clear search</button>
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {templates.map((t) => (
+          {filtered.map((t) => (
             <Card key={t.id} data-testid={`template-card-${t.id}`} className="group hover:shadow-sm transition-shadow">
               <CardContent className="p-5">
                 <div className="flex items-start justify-between mb-3">
@@ -255,6 +287,10 @@ export default function Templates() {
                       className="w-7 h-7 flex items-center justify-center rounded text-muted-foreground hover:text-primary hover:bg-primary/10"
                     >
                       <Send className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => handleDuplicate(t)} title="Duplicate" data-testid={`duplicate-template-${t.id}`}
+                      className="w-7 h-7 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted">
+                      <Copy className="w-3.5 h-3.5" />
                     </button>
                     <button onClick={() => openEdit(t)} data-testid={`edit-template-${t.id}`}
                       className="w-7 h-7 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted">

@@ -19,6 +19,16 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   useGetCampaign,
   useListCampaignMessages,
   useSendCampaign,
@@ -83,6 +93,7 @@ export default function CampaignDetail() {
 
   const [cancelling, setCancelling] = useState(false);
   const [optingOutFailed, setOptingOutFailed] = useState(false);
+  const [showSendConfirm, setShowSendConfirm] = useState(false);
 
   const [resendingFailed, setResendingFailed] = useState(false);
 
@@ -348,7 +359,7 @@ export default function CampaignDetail() {
           </Button>
           {(isDraft || isScheduled) && (
             <Button
-              onClick={handleSend}
+              onClick={() => setShowSendConfirm(true)}
               disabled={sendCampaign.isPending}
               size="sm"
               className="gap-2"
@@ -604,6 +615,55 @@ export default function CampaignDetail() {
           </div>
         </div>
       )}
+
+      {/* Send Confirmation Dialog */}
+      <AlertDialog open={showSendConfirm} onOpenChange={setShowSendConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <SendIcon className="w-4 h-4 text-primary" />
+              Confirm Send
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm">
+                <p>You are about to send <span className="font-semibold text-foreground">"{campaign.name}"</span> to:</p>
+                <div className="bg-muted/50 rounded-lg px-4 py-3 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Recipients</span>
+                    <span className="font-semibold text-foreground">{campaign.recipientCount.toLocaleString()} contacts</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Channel</span>
+                    <span className="font-semibold text-foreground capitalize">{campaign.channel}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Est. cost</span>
+                    <span className="font-semibold text-primary">
+                      {campaign.channel === "email"
+                        ? "Free"
+                        : `KES ${((campaign.channel === "sms" ? 1.2 : 0.5) * campaign.recipientCount).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      }
+                    </span>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">This action cannot be undone. All opted-in contacts in the selected groups will receive this message.</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleSend}
+              disabled={sendCampaign.isPending}
+              data-testid="button-confirm-send"
+              className="gap-2"
+            >
+              <SendIcon className="w-3.5 h-3.5" />
+              Send {campaign.recipientCount.toLocaleString()} messages
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Send Test Dialog */}
       <Dialog open={showTest} onOpenChange={setShowTest}>
