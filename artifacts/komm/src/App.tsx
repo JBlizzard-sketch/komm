@@ -8,6 +8,7 @@ import Campaigns from "@/pages/Campaigns";
 import CampaignNew from "@/pages/CampaignNew";
 import CampaignDetail from "@/pages/CampaignDetail";
 import Contacts from "@/pages/Contacts";
+import ContactDetail from "@/pages/ContactDetail";
 import Groups from "@/pages/Groups";
 import Templates from "@/pages/Templates";
 import Inbox from "@/pages/Inbox";
@@ -31,6 +32,7 @@ function Router() {
         <Route path="/campaigns/new" component={CampaignNew} />
         <Route path="/campaigns/:id" component={CampaignDetail} />
         <Route path="/campaigns" component={Campaigns} />
+        <Route path="/contacts/:id" component={ContactDetail} />
         <Route path="/contacts" component={Contacts} />
         <Route path="/groups" component={Groups} />
         <Route path="/templates" component={Templates} />

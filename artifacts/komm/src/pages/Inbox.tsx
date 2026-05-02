@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { MessageSquare, CheckCheck, Inbox as InboxIcon, CheckSquare } from "lucide-react";
+import { Link } from "wouter";
+import {
+  CheckCheck, Inbox as InboxIcon, CheckSquare, ChevronLeft, ChevronRight, UserCircle,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -19,28 +22,24 @@ const CHANNEL_COLORS: Record<string, string> = {
   whatsapp: "bg-emerald-100 text-emerald-800",
 };
 
+const PAGE_SIZE = 25;
+
 export default function Inbox() {
   const [readFilter, setReadFilter] = useState<string>("all");
   const [markingAll, setMarkingAll] = useState(false);
+  const [page, setPage] = useState(1);
   const qc = useQueryClient();
   const { toast } = useToast();
 
-  const { data, isLoading } = useListInboxMessages(
-    {
-      read: readFilter === "unread" ? false : readFilter === "read" ? true : undefined,
-      page: 1,
-      limit: 50,
-    },
-    {
-      query: {
-        queryKey: getListInboxMessagesQueryKey({
-          read: readFilter === "unread" ? false : readFilter === "read" ? true : undefined,
-          page: 1,
-          limit: 50,
-        }),
-      },
-    }
-  );
+  const queryArgs = {
+    read: readFilter === "unread" ? false : readFilter === "read" ? true : undefined,
+    page,
+    limit: PAGE_SIZE,
+  };
+
+  const { data, isLoading } = useListInboxMessages(queryArgs, {
+    query: { queryKey: getListInboxMessagesQueryKey(queryArgs) },
+  });
 
   const markRead = useMarkInboxRead();
 
@@ -73,10 +72,14 @@ export default function Inbox() {
   };
 
   const unreadCount = data?.unreadCount ?? 0;
+  const total = data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const handleFilterChange = (v: string) => { setReadFilter(v); setPage(1); };
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-semibold">Inbox</h1>
           <div className="flex items-center gap-2 mt-0.5">
@@ -111,7 +114,7 @@ export default function Inbox() {
               <button
                 key={f.value}
                 data-testid={`inbox-filter-${f.value}`}
-                onClick={() => setReadFilter(f.value)}
+                onClick={() => handleFilterChange(f.value)}
                 className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
                   readFilter === f.value
                     ? "bg-background shadow-sm text-foreground"
@@ -180,26 +183,85 @@ export default function Inbox() {
                     </p>
                   </div>
 
-                  {!msg.read ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="shrink-0 h-7 gap-1.5 text-xs"
-                      onClick={() => handleMarkRead(msg.id)}
-                      disabled={markRead.isPending}
-                      data-testid={`mark-read-${msg.id}`}
-                    >
-                      <CheckCheck className="w-3.5 h-3.5" />
-                      Mark read
-                    </Button>
-                  ) : (
-                    <CheckCheck className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
-                  )}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {msg.contactId && (
+                      <Link href={`/contacts/${msg.contactId}`}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                          title="View contact"
+                          data-testid={`view-contact-${msg.id}`}
+                        >
+                          <UserCircle className="w-4 h-4" />
+                        </Button>
+                      </Link>
+                    )}
+                    {!msg.read ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="shrink-0 h-7 gap-1.5 text-xs"
+                        onClick={() => handleMarkRead(msg.id)}
+                        disabled={markRead.isPending}
+                        data-testid={`mark-read-${msg.id}`}
+                      >
+                        <CheckCheck className="w-3.5 h-3.5" />
+                        Mark read
+                      </Button>
+                    ) : (
+                      <CheckCheck className="w-4 h-4 text-muted-foreground" />
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </CardContent>
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-5 py-3 border-t border-border">
+            <span className="text-xs text-muted-foreground">
+              Page {page} of {totalPages} · {total} messages
+            </span>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                data-testid="inbox-page-prev"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                const pg = totalPages <= 5 ? i + 1 : page <= 3 ? i + 1 : page >= totalPages - 2 ? totalPages - 4 + i : page - 2 + i;
+                return (
+                  <Button
+                    key={pg}
+                    variant={pg === page ? "default" : "outline"}
+                    size="sm"
+                    className="h-7 w-7 p-0 text-xs"
+                    onClick={() => setPage(pg)}
+                  >
+                    {pg}
+                  </Button>
+                );
+              })}
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                data-testid="inbox-page-next"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
     </div>
   );

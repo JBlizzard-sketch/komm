@@ -10,6 +10,7 @@ import {
   Info,
   Webhook,
   RefreshCw,
+  FlaskConical,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -33,21 +34,40 @@ function useProviderStatus() {
   });
 }
 
+interface TestResult { success: boolean; simulated: boolean; messageId: string | null; error: string | null }
+
 interface IntegrationCardProps {
   title: string;
   description: string;
   icon: React.ElementType;
   iconColor: string;
   status: ProviderStatus | "loading";
+  channel: "sms" | "whatsapp" | "email";
   envVars: { name: string; description: string; example: string }[];
   docsUrl: string;
   webhookPath?: string;
 }
 
 function IntegrationCard({
-  title, description, icon: Icon, iconColor, status, envVars, docsUrl, webhookPath,
+  title, description, icon: Icon, iconColor, status, channel, envVars, docsUrl, webhookPath,
 }: IntegrationCardProps) {
   const [showVars, setShowVars] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<TestResult | null>(null);
+
+  const handleTest = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await fetch(`/api/settings/test/${channel}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+      const data: TestResult = await res.json();
+      setTestResult(data);
+    } catch {
+      setTestResult({ success: false, simulated: false, messageId: null, error: "Network error" });
+    } finally {
+      setTesting(false);
+    }
+  };
 
   const statusConfig = {
     active: { label: "Active", class: "bg-green-100 text-green-800 border-green-200", dot: "bg-green-500" },
@@ -91,13 +111,37 @@ function IntegrationCard({
           </div>
         )}
 
+        {testResult && (
+          <div className={`flex items-start gap-2 p-3 rounded-lg border text-xs ${testResult.success ? "bg-green-50 border-green-200 text-green-800" : "bg-red-50 border-red-200 text-red-800"}`}>
+            {testResult.success ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" /> : <XCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />}
+            <span>
+              {testResult.success
+                ? testResult.simulated
+                  ? "Connection test simulated successfully (no real provider configured)."
+                  : `Connection test sent via live provider.${testResult.messageId ? ` Message ID: ${testResult.messageId}` : ""}`
+                : `Test failed: ${testResult.error ?? "Unknown error"}`}
+            </span>
+          </div>
+        )}
+
         <div className="flex items-center justify-between">
-          <button
-            onClick={() => setShowVars((v) => !v)}
-            className="text-xs text-primary hover:underline font-medium"
-          >
-            {showVars ? "Hide" : "Show"} required environment variables
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowVars((v) => !v)}
+              className="text-xs text-primary hover:underline font-medium"
+            >
+              {showVars ? "Hide" : "Show"} required environment variables
+            </button>
+            <button
+              onClick={handleTest}
+              disabled={testing || status === "loading"}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
+              data-testid={`test-${channel}`}
+            >
+              <FlaskConical className={`w-3 h-3 ${testing ? "animate-pulse" : ""}`} />
+              {testing ? "Testing…" : "Test connection"}
+            </button>
+          </div>
           <a
             href={docsUrl}
             target="_blank"
@@ -188,6 +232,7 @@ export default function Settings() {
           description="Bulk SMS delivery across Kenya, Uganda, Tanzania, Ghana and more via USSD/GSM."
           icon={Smartphone}
           iconColor="bg-[#e53e00]"
+          channel="sms"
           status={getStatus("sms")}
           docsUrl="https://developers.africastalking.com/docs/sms/sending"
           webhookPath="/webhooks/at/delivery"
@@ -203,6 +248,7 @@ export default function Settings() {
           description="Send WhatsApp messages via the Meta / WhatsApp Business Cloud API."
           icon={MessageSquare}
           iconColor="bg-[#25d366]"
+          channel="whatsapp"
           status={getStatus("whatsapp")}
           docsUrl="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started"
           webhookPath="/webhooks/whatsapp"
@@ -218,6 +264,7 @@ export default function Settings() {
           description="Send transactional and bulk emails via any SMTP provider (Gmail, SendGrid, Mailgun, Resend…)."
           icon={Mail}
           iconColor="bg-indigo-600"
+          channel="email"
           status={getStatus("email")}
           docsUrl="https://nodemailer.com/smtp/"
           envVars={[

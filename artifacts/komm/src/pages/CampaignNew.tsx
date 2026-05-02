@@ -305,16 +305,27 @@ export default function CampaignNew() {
             ) : groups.length === 0 ? (
               <p className="text-sm text-muted-foreground">No groups yet. Create groups in the Groups section.</p>
             ) : (
-              <div className="flex flex-wrap gap-2">
-                {groups.map((g) => (
-                  <button key={g.id} type="button" data-testid={`group-toggle-${g.id}`} onClick={() => toggleGroup(g.id)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm transition-colors ${selectedGroupIds.includes(g.id) ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-muted-foreground/40"}`}
-                  >
-                    {g.name}
-                    <span className={`text-xs ${selectedGroupIds.includes(g.id) ? "text-primary-foreground/70" : "text-muted-foreground"}`}>{g.contactCount}</span>
-                  </button>
-                ))}
-              </div>
+              <>
+                <div className="flex flex-wrap gap-2">
+                  {groups.map((g) => (
+                    <button key={g.id} type="button" data-testid={`group-toggle-${g.id}`} onClick={() => toggleGroup(g.id)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm transition-colors ${selectedGroupIds.includes(g.id) ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-muted-foreground/40"}`}
+                    >
+                      {g.name}
+                      <span className={`text-xs ${selectedGroupIds.includes(g.id) ? "text-primary-foreground/70" : "text-muted-foreground"}`}>{g.contactCount}</span>
+                    </button>
+                  ))}
+                </div>
+                {selectedGroupIds.length > 0 && (() => {
+                  const approxTotal = groups.filter((g) => selectedGroupIds.includes(g.id)).reduce((sum, g) => sum + g.contactCount, 0);
+                  return (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      ~{approxTotal.toLocaleString()} recipient{approxTotal !== 1 ? "s" : ""} across {selectedGroupIds.length} group{selectedGroupIds.length !== 1 ? "s" : ""}
+                      {selectedGroupIds.length > 1 ? " (overlapping contacts are counted once at send time)" : ""}
+                    </p>
+                  );
+                })()}
+              </>
             )}
           </div>
 
