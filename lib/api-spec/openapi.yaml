@@ -809,6 +809,8 @@ components:
           type: array
           items:
             type: integer
+        optedOut:
+          type: boolean
         customFields:
           type: object
           additionalProperties:
@@ -1146,6 +1148,9 @@ components:
           type: string
         contactName:
           type: string
+          nullable: true
+        contactId:
+          type: integer
           nullable: true
         body:
           type: string

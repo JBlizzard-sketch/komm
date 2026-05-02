@@ -94,7 +94,6 @@ export default function CampaignDetail() {
       query: {
         enabled: !!campaignId,
         queryKey: getListCampaignMessagesQueryKey(campaignId, { page: msgPage, limit: MSG_PAGE_SIZE }),
-        keepPreviousData: true,
       },
     }
   );

@@ -27,6 +27,7 @@ export interface Contact {
   email?: string | null;
   channel: ContactChannel;
   groupIds?: number[];
+  optedOut?: boolean;
   customFields?: ContactCustomFields;
   createdAt: string;
 }
@@ -267,6 +268,7 @@ export interface InboxMessage {
   id: number;
   from: string;
   contactName?: string | null;
+  contactId?: number | null;
   body: string;
   channel: InboxMessageChannel;
   read: boolean;

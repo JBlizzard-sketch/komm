@@ -191,13 +191,13 @@ export default function ContactDetail() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Groups</p>
-              {(contact.groups ?? []).length === 0 ? (
+              {(contact.groupIds ?? []).length === 0 ? (
                 <p className="text-sm text-muted-foreground mt-0.5">No groups</p>
               ) : (
                 <div className="flex flex-wrap gap-1 mt-1">
-                  {(contact.groups ?? []).map((g) => (
-                    <Badge key={g.id} variant="outline" className="text-xs">
-                      {g.name}
+                  {(contact.groupIds ?? []).map((gid) => (
+                    <Badge key={gid} variant="outline" className="text-xs">
+                      Group {gid}
                     </Badge>
                   ))}
                 </div>
