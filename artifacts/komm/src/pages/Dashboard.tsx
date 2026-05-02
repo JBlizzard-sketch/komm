@@ -147,7 +147,7 @@ export default function Dashboard() {
           <StatCard label="Unread Replies" value={stats?.unreadReplies ?? 0} icon={Inbox} loading={statsLoading} href="/inbox" />
         </div>
         <div className="col-span-2 lg:col-span-1 xl:col-span-1">
-          <StatCard label="Opted Out" value={(stats as { optedOutContacts?: number } & typeof stats)?.optedOutContacts ?? 0} icon={BellOff} loading={statsLoading} href="/contacts" />
+          <StatCard label="Opted Out" value={(stats as { optedOutContacts?: number } & typeof stats)?.optedOutContacts ?? 0} icon={BellOff} loading={statsLoading} href="/contacts?optedOut=1" />
         </div>
       </div>
 

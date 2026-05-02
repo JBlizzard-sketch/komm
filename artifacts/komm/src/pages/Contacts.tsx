@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Plus, Upload, Search, Trash2, Users, FileSpreadsheet,
   CheckCircle2, AlertCircle, X, Download, UserPlus, CheckSquare, Square, Edit2,
@@ -412,8 +412,13 @@ function ContactFormDialog({
 
 export default function Contacts() {
   const [search, setSearch] = useState("");
-  const [groupFilter, setGroupFilter] = useState("all");
+  const urlOptedOut = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("optedOut") === "1";
+  const [groupFilter, setGroupFilter] = useState(urlOptedOut ? "opted-out" : "all");
   const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    if (urlOptedOut) setGroupFilter("opted-out");
+  }, []);
 
   const [showContactForm, setShowContactForm] = useState(false);
   const [editContact, setEditContact] = useState<Contact | null>(null);
