@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import {
-  Users, Send, TrendingUp, MessageSquare, CalendarClock, Inbox, Plus, Clock, ArrowRight,
+  Users, Send, TrendingUp, MessageSquare, CalendarClock, Inbox, Plus, Clock, ArrowRight, BellOff,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -127,7 +127,7 @@ export default function Dashboard() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4 mb-6">
         <div className="col-span-2 lg:col-span-1 xl:col-span-1">
           <StatCard label="Total Contacts" value={stats?.totalContacts?.toLocaleString() ?? 0} icon={Users} loading={statsLoading} href="/contacts" />
         </div>
@@ -145,6 +145,9 @@ export default function Dashboard() {
         </div>
         <div className="col-span-2 lg:col-span-1 xl:col-span-1">
           <StatCard label="Unread Replies" value={stats?.unreadReplies ?? 0} icon={Inbox} loading={statsLoading} href="/inbox" />
+        </div>
+        <div className="col-span-2 lg:col-span-1 xl:col-span-1">
+          <StatCard label="Opted Out" value={(stats as { optedOutContacts?: number } & typeof stats)?.optedOutContacts ?? 0} icon={BellOff} loading={statsLoading} href="/contacts" />
         </div>
       </div>
 
