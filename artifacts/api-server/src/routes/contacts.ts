@@ -130,11 +130,27 @@ router.get("/contacts", async (req, res) => {
     groupMap.get(m.contactId)!.push(m.groupId);
   }
 
+  let lastContactedMap = new Map<number, string>();
+  if (ids.length > 0) {
+    const lastContacted = await db
+      .select({
+        contactId: campaignMessagesTable.contactId,
+        lastContactedAt: sql<string>`max(${campaignMessagesTable.createdAt})`,
+      })
+      .from(campaignMessagesTable)
+      .where(inArray(campaignMessagesTable.contactId, ids))
+      .groupBy(campaignMessagesTable.contactId);
+    for (const row of lastContacted) {
+      if (row.lastContactedAt) lastContactedMap.set(row.contactId, row.lastContactedAt);
+    }
+  }
+
   return res.json({
     data: contacts.map((c) => ({
       ...c,
       groupIds: groupMap.get(c.id) ?? [],
       customFields: c.customFields ?? null,
+      lastContactedAt: lastContactedMap.get(c.id) ?? null,
     })),
     total,
     page,

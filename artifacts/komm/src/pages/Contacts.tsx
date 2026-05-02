@@ -27,7 +27,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import { useLocation } from "wouter";
 import type { Contact } from "@workspace/api-client-react";
 
@@ -632,7 +632,7 @@ export default function Contacts() {
           <span className="w-32 text-xs font-medium text-muted-foreground uppercase tracking-wide">Phone</span>
           <span className="w-24 text-xs font-medium text-muted-foreground uppercase tracking-wide">Channel</span>
           <span className="flex-1 text-xs font-medium text-muted-foreground uppercase tracking-wide">Groups</span>
-          <span className="w-28 text-xs font-medium text-muted-foreground uppercase tracking-wide text-right">Added</span>
+          <span className="w-32 text-xs font-medium text-muted-foreground uppercase tracking-wide text-right">Last Contact</span>
           <span className="w-20" />
         </div>
 
@@ -677,7 +677,11 @@ export default function Contacts() {
                     {(contact.groupIds ?? []).slice(0, 3).map((gid) => { const g = groups?.find((gr) => gr.id === gid); return g ? (<Badge key={gid} variant="outline" className="text-[10px]">{g.name}</Badge>) : null; })}
                     {(contact.groupIds ?? []).length > 3 && <Badge variant="outline" className="text-[10px]">+{(contact.groupIds ?? []).length - 3}</Badge>}
                   </div>
-                  <span className="text-xs text-muted-foreground w-28 text-right shrink-0">{format(new Date(contact.createdAt), "MMM d, yyyy")}</span>
+                  <span className="text-xs text-muted-foreground w-32 text-right shrink-0" title={(contact as any).lastContactedAt ? format(new Date((contact as any).lastContactedAt), "MMM d, yyyy HH:mm") : `Added ${format(new Date(contact.createdAt), "MMM d, yyyy")}`}>
+                    {(contact as any).lastContactedAt
+                      ? formatDistanceToNow(new Date((contact as any).lastContactedAt), { addSuffix: true })
+                      : <span className="text-muted-foreground/50">Never</span>}
+                  </span>
                   <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-all shrink-0 w-24 justify-end">
                     <button onClick={() => setHistoryContact(contact)} title="View message history"
                       className="w-7 h-7 flex items-center justify-center rounded text-muted-foreground hover:text-primary hover:bg-primary/10" data-testid={`history-contact-${contact.id}`}>
