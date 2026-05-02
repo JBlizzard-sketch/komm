@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import {
   Plus, Upload, Search, Trash2, Users, FileSpreadsheet,
   CheckCircle2, AlertCircle, X, Download, UserPlus, CheckSquare, Square, Edit2,
-  ChevronLeft, ChevronRight, History, ExternalLink,
+  ChevronLeft, ChevronRight, History, ExternalLink, BellOff, Bell,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,7 +28,7 @@ import {
   useListGroups,
   getListContactsQueryKey, getListGroupsQueryKey, getGetDashboardStatsQueryKey,
 } from "@workspace/api-client-react";
-import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { useLocation } from "wouter";
@@ -445,6 +445,18 @@ export default function Contacts() {
   const bulkDelete = useBulkDeleteContacts();
   const bulkGroup = useBulkAddContactsToGroup();
 
+  const toggleOptOut = useMutation({
+    mutationFn: async ({ id, optedOut }: { id: number; optedOut: boolean }) => {
+      const action = optedOut ? "opt-out" : "opt-in";
+      const res = await fetch(`/api/contacts/${id}/${action}`, { method: "POST" });
+      if (!res.ok) throw new Error();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: getListContactsQueryKey() });
+    },
+    onError: () => toast({ title: "Failed to update opt-out status", variant: "destructive" }),
+  });
+
   const openAdd = () => { setEditContact(null); setShowContactForm(true); };
   const openEdit = (c: Contact) => { setEditContact(c); setShowContactForm(true); };
   const closeForm = () => { setShowContactForm(false); setEditContact(null); };
@@ -631,10 +643,18 @@ export default function Contacts() {
                     {(contact.groupIds ?? []).length > 3 && <Badge variant="outline" className="text-[10px]">+{(contact.groupIds ?? []).length - 3}</Badge>}
                   </div>
                   <span className="text-xs text-muted-foreground w-28 text-right shrink-0">{format(new Date(contact.createdAt), "MMM d, yyyy")}</span>
-                  <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-all shrink-0 w-20 justify-end">
+                  <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-all shrink-0 w-24 justify-end">
                     <button onClick={() => setHistoryContact(contact)} title="View message history"
                       className="w-7 h-7 flex items-center justify-center rounded text-muted-foreground hover:text-primary hover:bg-primary/10" data-testid={`history-contact-${contact.id}`}>
                       <History className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => toggleOptOut.mutate({ id: contact.id, optedOut: !contact.optedOut })}
+                      title={contact.optedOut ? "Re-subscribe (opt back in)" : "Opt out of messages"}
+                      className={`w-7 h-7 flex items-center justify-center rounded ${contact.optedOut ? "text-red-500 hover:text-primary hover:bg-primary/10" : "text-muted-foreground hover:text-red-500 hover:bg-red-50"}`}
+                      data-testid={`opt-toggle-${contact.id}`}
+                    >
+                      {contact.optedOut ? <Bell className="w-3.5 h-3.5" /> : <BellOff className="w-3.5 h-3.5" />}
                     </button>
                     <button onClick={() => openEdit(contact)} className="w-7 h-7 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted" data-testid={`edit-contact-${contact.id}`}>
                       <Edit2 className="w-3.5 h-3.5" />

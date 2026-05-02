@@ -41,6 +41,20 @@ function smsSegments(text: string) {
   return { chars, segments };
 }
 
+// Approximate cost in KES per message
+const COST_PER_MSG: Record<string, number> = {
+  sms: 1.2,      // Africa's Talking Kenya rate
+  whatsapp: 0.5, // WhatsApp Cloud API approx.
+  email: 0,
+};
+
+function estimateCost(channel: string, recipients: number, segments = 1) {
+  const rate = COST_PER_MSG[channel] ?? 0;
+  const total = rate * recipients * (channel === "sms" ? segments : 1);
+  if (total === 0) return null;
+  return `~KES ${total.toFixed(2)}`;
+}
+
 const CHANNELS = [
   { value: "sms", label: "SMS", icon: MessageSquare, desc: "Via Africa's Talking — best Kenyan delivery" },
   { value: "whatsapp", label: "WhatsApp", icon: MessageSquare, desc: "Pre-approved templates — Cloud API" },
@@ -318,11 +332,19 @@ export default function CampaignNew() {
                 </div>
                 {selectedGroupIds.length > 0 && (() => {
                   const approxTotal = groups.filter((g) => selectedGroupIds.includes(g.id)).reduce((sum, g) => sum + g.contactCount, 0);
+                  const costLabel = estimateCost(channel, approxTotal, segments);
                   return (
-                    <p className="text-xs text-muted-foreground mt-2">
-                      ~{approxTotal.toLocaleString()} recipient{approxTotal !== 1 ? "s" : ""} across {selectedGroupIds.length} group{selectedGroupIds.length !== 1 ? "s" : ""}
-                      {selectedGroupIds.length > 1 ? " (overlapping contacts are counted once at send time)" : ""}
-                    </p>
+                    <div className="mt-2 flex items-center gap-3 flex-wrap">
+                      <p className="text-xs text-muted-foreground">
+                        ~{approxTotal.toLocaleString()} recipient{approxTotal !== 1 ? "s" : ""} across {selectedGroupIds.length} group{selectedGroupIds.length !== 1 ? "s" : ""}
+                        {selectedGroupIds.length > 1 ? " (unique at send time)" : ""}
+                      </p>
+                      {costLabel && (
+                        <span className="text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full">
+                          Est. cost: {costLabel}
+                        </span>
+                      )}
+                    </div>
                   );
                 })()}
               </>

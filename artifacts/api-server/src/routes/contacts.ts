@@ -245,6 +245,30 @@ router.delete("/contacts/:id", async (req, res) => {
   return res.status(204).send();
 });
 
+router.post("/contacts/:id/opt-out", async (req, res) => {
+  const id = parseInt(req.params["id"] ?? "0", 10);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  const [contact] = await db
+    .update(contactsTable)
+    .set({ optedOut: true })
+    .where(eq(contactsTable.id, id))
+    .returning();
+  if (!contact) return res.status(404).json({ error: "Not found" });
+  return res.json(contact);
+});
+
+router.post("/contacts/:id/opt-in", async (req, res) => {
+  const id = parseInt(req.params["id"] ?? "0", 10);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  const [contact] = await db
+    .update(contactsTable)
+    .set({ optedOut: false })
+    .where(eq(contactsTable.id, id))
+    .returning();
+  if (!contact) return res.status(404).json({ error: "Not found" });
+  return res.json(contact);
+});
+
 router.post("/contacts/bulk-delete", async (req, res) => {
   const { contactIds } = BulkDeleteContactsBody.parse(req.body);
   if (contactIds.length === 0) return res.json({ deleted: 0 });
