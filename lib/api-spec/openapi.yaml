@@ -1,0 +1,1061 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: Komm — Bulk Messaging Platform API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: contacts
+    description: Contact management
+  - name: groups
+    description: Contact groups
+  - name: templates
+    description: Message templates
+  - name: campaigns
+    description: Campaigns and sends
+  - name: inbox
+    description: Incoming replies
+  - name: dashboard
+    description: Dashboard stats and activity
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  # ── Contacts ──────────────────────────────────────────────────────────────
+  /contacts:
+    get:
+      operationId: listContacts
+      tags: [contacts]
+      summary: List all contacts
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: groupId
+          in: query
+          schema:
+            type: integer
+        - name: channel
+          in: query
+          schema:
+            type: string
+            enum: [sms, whatsapp, email]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: List of contacts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContactsPage"
+    post:
+      operationId: createContact
+      tags: [contacts]
+      summary: Create a contact
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateContactBody"
+      responses:
+        "201":
+          description: Created contact
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Contact"
+
+  /contacts/{id}:
+    get:
+      operationId: getContact
+      tags: [contacts]
+      summary: Get a contact
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Contact
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Contact"
+    put:
+      operationId: updateContact
+      tags: [contacts]
+      summary: Update a contact
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateContactBody"
+      responses:
+        "200":
+          description: Updated contact
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Contact"
+    delete:
+      operationId: deleteContact
+      tags: [contacts]
+      summary: Delete a contact
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /contacts/import:
+    post:
+      operationId: importContacts
+      tags: [contacts]
+      summary: Bulk import contacts from JSON (parsed from CSV/Excel client-side)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportContactsBody"
+      responses:
+        "200":
+          description: Import result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportResult"
+
+  # ── Groups ─────────────────────────────────────────────────────────────────
+  /groups:
+    get:
+      operationId: listGroups
+      tags: [groups]
+      summary: List contact groups
+      responses:
+        "200":
+          description: Groups
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Group"
+    post:
+      operationId: createGroup
+      tags: [groups]
+      summary: Create a group
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateGroupBody"
+      responses:
+        "201":
+          description: Group
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Group"
+
+  /groups/{id}:
+    put:
+      operationId: updateGroup
+      tags: [groups]
+      summary: Update a group
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateGroupBody"
+      responses:
+        "200":
+          description: Group
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Group"
+    delete:
+      operationId: deleteGroup
+      tags: [groups]
+      summary: Delete a group
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /groups/{id}/contacts:
+    post:
+      operationId: addContactsToGroup
+      tags: [groups]
+      summary: Add contacts to a group
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContactIdsBody"
+      responses:
+        "200":
+          description: Updated group
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Group"
+
+  # ── Templates ──────────────────────────────────────────────────────────────
+  /templates:
+    get:
+      operationId: listTemplates
+      tags: [templates]
+      summary: List message templates
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [sacco, church, general]
+        - name: channel
+          in: query
+          schema:
+            type: string
+            enum: [sms, whatsapp, email]
+      responses:
+        "200":
+          description: Templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Template"
+    post:
+      operationId: createTemplate
+      tags: [templates]
+      summary: Create a template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTemplateBody"
+      responses:
+        "201":
+          description: Template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Template"
+
+  /templates/{id}:
+    get:
+      operationId: getTemplate
+      tags: [templates]
+      summary: Get a template
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Template"
+    put:
+      operationId: updateTemplate
+      tags: [templates]
+      summary: Update a template
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTemplateBody"
+      responses:
+        "200":
+          description: Template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Template"
+    delete:
+      operationId: deleteTemplate
+      tags: [templates]
+      summary: Delete a template
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ── Campaigns ──────────────────────────────────────────────────────────────
+  /campaigns:
+    get:
+      operationId: listCampaigns
+      tags: [campaigns]
+      summary: List campaigns
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, scheduled, sending, sent, failed]
+        - name: channel
+          in: query
+          schema:
+            type: string
+            enum: [sms, whatsapp, email]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Campaigns
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignsPage"
+    post:
+      operationId: createCampaign
+      tags: [campaigns]
+      summary: Create a campaign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCampaignBody"
+      responses:
+        "201":
+          description: Campaign
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+
+  /campaigns/{id}:
+    get:
+      operationId: getCampaign
+      tags: [campaigns]
+      summary: Get a campaign with delivery stats
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Campaign detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignDetail"
+    put:
+      operationId: updateCampaign
+      tags: [campaigns]
+      summary: Update a campaign (draft only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCampaignBody"
+      responses:
+        "200":
+          description: Campaign
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+    delete:
+      operationId: deleteCampaign
+      tags: [campaigns]
+      summary: Delete a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /campaigns/{id}/send:
+    post:
+      operationId: sendCampaign
+      tags: [campaigns]
+      summary: Send a campaign now (or confirm schedule)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Campaign queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+
+  /campaigns/{id}/messages:
+    get:
+      operationId: listCampaignMessages
+      tags: [campaigns]
+      summary: List individual message delivery records for a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, sent, delivered, failed, opened]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: Message delivery records
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignMessagesPage"
+
+  # ── Inbox ──────────────────────────────────────────────────────────────────
+  /inbox:
+    get:
+      operationId: listInboxMessages
+      tags: [inbox]
+      summary: List incoming replies
+      parameters:
+        - name: read
+          in: query
+          schema:
+            type: boolean
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        "200":
+          description: Inbox messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxPage"
+
+  /inbox/{id}/read:
+    post:
+      operationId: markInboxRead
+      tags: [inbox]
+      summary: Mark a reply as read
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Inbox message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxMessage"
+
+  # ── Dashboard ──────────────────────────────────────────────────────────────
+  /dashboard/stats:
+    get:
+      operationId: getDashboardStats
+      tags: [dashboard]
+      summary: Get overall dashboard statistics
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /dashboard/activity:
+    get:
+      operationId: getDashboardActivity
+      tags: [dashboard]
+      summary: Recent campaign activity feed
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        "200":
+          description: Activity items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityItem"
+
+  /dashboard/delivery-trend:
+    get:
+      operationId: getDeliveryTrend
+      tags: [dashboard]
+      summary: Message volume by day for the last 30 days
+      responses:
+        "200":
+          description: Daily delivery counts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DailyCount"
+
+  /dashboard/channel-breakdown:
+    get:
+      operationId: getChannelBreakdown
+      tags: [dashboard]
+      summary: Messages sent per channel
+      responses:
+        "200":
+          description: Channel breakdown
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChannelCount"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+
+    # ── Contacts ────────────────────────────────────────────────────────────
+    Contact:
+      type: object
+      required: [id, name, phone, channel, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+          nullable: true
+        channel:
+          type: string
+          enum: [sms, whatsapp, email]
+        groupIds:
+          type: array
+          items:
+            type: integer
+        customFields:
+          type: object
+          additionalProperties:
+            type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateContactBody:
+      type: object
+      required: [name, phone, channel]
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+          nullable: true
+        channel:
+          type: string
+          enum: [sms, whatsapp, email]
+        groupIds:
+          type: array
+          items:
+            type: integer
+        customFields:
+          type: object
+          additionalProperties:
+            type: string
+          nullable: true
+
+    ContactsPage:
+      type: object
+      required: [data, total, page, limit]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Contact"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    ImportContactsBody:
+      type: object
+      required: [contacts]
+      properties:
+        contacts:
+          type: array
+          items:
+            $ref: "#/components/schemas/CreateContactBody"
+        groupId:
+          type: integer
+          nullable: true
+
+    ImportResult:
+      type: object
+      required: [imported, duplicates, errors]
+      properties:
+        imported:
+          type: integer
+        duplicates:
+          type: integer
+        errors:
+          type: integer
+        errorDetails:
+          type: array
+          items:
+            type: string
+
+    ContactIdsBody:
+      type: object
+      required: [contactIds]
+      properties:
+        contactIds:
+          type: array
+          items:
+            type: integer
+
+    # ── Groups ──────────────────────────────────────────────────────────────
+    Group:
+      type: object
+      required: [id, name, contactCount, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        contactCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateGroupBody:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+
+    # ── Templates ────────────────────────────────────────────────────────────
+    Template:
+      type: object
+      required: [id, name, body, channel, category, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        body:
+          type: string
+        channel:
+          type: string
+          enum: [sms, whatsapp, email]
+        category:
+          type: string
+          enum: [sacco, church, general]
+        variables:
+          type: array
+          items:
+            type: string
+          description: Variable placeholder names e.g. ["name","amount","date"]
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateTemplateBody:
+      type: object
+      required: [name, body, channel, category]
+      properties:
+        name:
+          type: string
+        body:
+          type: string
+        channel:
+          type: string
+          enum: [sms, whatsapp, email]
+        category:
+          type: string
+          enum: [sacco, church, general]
+        variables:
+          type: array
+          items:
+            type: string
+
+    # ── Campaigns ────────────────────────────────────────────────────────────
+    Campaign:
+      type: object
+      required: [id, name, channel, status, recipientCount, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        channel:
+          type: string
+          enum: [sms, whatsapp, email]
+        status:
+          type: string
+          enum: [draft, scheduled, sending, sent, failed]
+        body:
+          type: string
+        templateId:
+          type: integer
+          nullable: true
+        groupIds:
+          type: array
+          items:
+            type: integer
+        recipientCount:
+          type: integer
+        scheduledAt:
+          type: string
+          format: date-time
+          nullable: true
+        sentAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    CampaignDetail:
+      allOf:
+        - $ref: "#/components/schemas/Campaign"
+        - type: object
+          properties:
+            deliveredCount:
+              type: integer
+            failedCount:
+              type: integer
+            openedCount:
+              type: integer
+            deliveryRate:
+              type: number
+
+    CreateCampaignBody:
+      type: object
+      required: [name, channel, body]
+      properties:
+        name:
+          type: string
+        channel:
+          type: string
+          enum: [sms, whatsapp, email]
+        body:
+          type: string
+        templateId:
+          type: integer
+          nullable: true
+        groupIds:
+          type: array
+          items:
+            type: integer
+        scheduledAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    CampaignsPage:
+      type: object
+      required: [data, total, page, limit]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Campaign"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    CampaignMessage:
+      type: object
+      required: [id, campaignId, contactId, contactName, phone, status, createdAt]
+      properties:
+        id:
+          type: integer
+        campaignId:
+          type: integer
+        contactId:
+          type: integer
+        contactName:
+          type: string
+        phone:
+          type: string
+        status:
+          type: string
+          enum: [pending, sent, delivered, failed, opened]
+        errorMessage:
+          type: string
+          nullable: true
+        deliveredAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    CampaignMessagesPage:
+      type: object
+      required: [data, total, page, limit]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/CampaignMessage"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    # ── Inbox ────────────────────────────────────────────────────────────────
+    InboxMessage:
+      type: object
+      required: [id, from, body, channel, read, receivedAt]
+      properties:
+        id:
+          type: integer
+        from:
+          type: string
+        contactName:
+          type: string
+          nullable: true
+        body:
+          type: string
+        channel:
+          type: string
+          enum: [sms, whatsapp]
+        read:
+          type: boolean
+        campaignId:
+          type: integer
+          nullable: true
+        receivedAt:
+          type: string
+          format: date-time
+
+    InboxPage:
+      type: object
+      required: [data, total, page, limit, unreadCount]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/InboxMessage"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+        unreadCount:
+          type: integer
+
+    # ── Dashboard ────────────────────────────────────────────────────────────
+    DashboardStats:
+      type: object
+      required: [totalContacts, totalCampaigns, messagesSentThisMonth, deliveryRate, scheduledCampaigns, unreadReplies]
+      properties:
+        totalContacts:
+          type: integer
+        totalCampaigns:
+          type: integer
+        messagesSentThisMonth:
+          type: integer
+        deliveryRate:
+          type: number
+        scheduledCampaigns:
+          type: integer
+        unreadReplies:
+          type: integer
+
+    ActivityItem:
+      type: object
+      required: [id, type, description, createdAt]
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+          enum: [campaign_sent, campaign_scheduled, contact_imported, reply_received]
+        description:
+          type: string
+        channel:
+          type: string
+          nullable: true
+        count:
+          type: integer
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    DailyCount:
+      type: object
+      required: [date, sms, whatsapp, email]
+      properties:
+        date:
+          type: string
+        sms:
+          type: integer
+        whatsapp:
+          type: integer
+        email:
+          type: integer
+
+    ChannelCount:
+      type: object
+      required: [channel, count, percentage]
+      properties:
+        channel:
+          type: string
+        count:
+          type: integer
+        percentage:
+          type: number

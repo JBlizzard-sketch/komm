@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Komm — Bulk Messaging Platform"
+version = "1.0.0"
+id = "artifacts/komm"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22559
+
+[services.development]
+run = "pnpm --filter @workspace/komm run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/komm", "run", "build" ]
+publicDir = "artifacts/komm/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22559"
+BASE_PATH = "/"
