@@ -11,12 +11,43 @@ import {
   Webhook,
   RefreshCw,
   FlaskConical,
+  Copy,
+  Check,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
+
+function WebhookPanel({ path }: { path: string }) {
+  const [copied, setCopied] = useState(false);
+  const fullUrl = `${window.location.origin}/api${path}`;
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(fullUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <div className="flex items-start gap-2 p-3 bg-muted/40 border border-border rounded-lg">
+      <Webhook className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-medium text-foreground mb-0.5">Webhook endpoint</p>
+        <code className="text-xs font-mono text-muted-foreground break-all">{fullUrl}</code>
+      </div>
+      <button
+        onClick={handleCopy}
+        title="Copy webhook URL"
+        className="shrink-0 w-7 h-7 flex items-center justify-center rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+      >
+        {copied ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
+      </button>
+    </div>
+  );
+}
 
 type ProviderStatus = "active" | "simulated";
 interface StatusResponse { sms: ProviderStatus; whatsapp: ProviderStatus; email: ProviderStatus }
@@ -180,13 +211,7 @@ function IntegrationCard({
         )}
 
         {webhookPath && (
-          <div className="flex items-start gap-2 p-3 bg-muted/40 border border-border rounded-lg">
-            <Webhook className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
-            <div>
-              <p className="text-xs font-medium text-foreground">Webhook endpoint</p>
-              <code className="text-xs font-mono text-muted-foreground break-all">/api{webhookPath}</code>
-            </div>
-          </div>
+          <WebhookPanel path={webhookPath} />
         )}
       </CardContent>
     </Card>
