@@ -1,14 +1,15 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useLocation } from "wouter";
-import { ArrowLeft, Phone, Mail, Users, MessageSquare, Calendar, Edit2, Trash2, BellOff } from "lucide-react";
+import { ArrowLeft, Phone, Mail, Users, MessageSquare, Calendar, Edit2, Trash2, BellOff, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   useGetContact, useDeleteContact, useListGroups,
-  getListContactsQueryKey,
+  getListContactsQueryKey, getGetContactQueryKey,
 } from "@workspace/api-client-react";
+import { useMutation } from "@tanstack/react-query";
 import { ContactFormDialog } from "@/components/ContactFormDialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -73,6 +74,25 @@ export default function ContactDetail() {
 
   const deleteContact = useDeleteContact();
 
+  const toggleOptOut = useMutation({
+    mutationFn: async (optOut: boolean) => {
+      const endpoint = optOut ? "bulk-opt-out" : "bulk-opt-in";
+      const res = await fetch(`/api/contacts/${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contactIds: [contactId] }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    onSuccess: (_data, optOut) => {
+      qc.invalidateQueries({ queryKey: getGetContactQueryKey(contactId) });
+      qc.invalidateQueries({ queryKey: getListContactsQueryKey() });
+      toast({ title: optOut ? "Contact opted out" : "Contact opted back in" });
+    },
+    onError: () => toast({ title: "Failed to update opt-out status", variant: "destructive" }),
+  });
+
   const handleDelete = () => {
     if (!window.confirm(`Delete ${contact?.name}? This cannot be undone.`)) return;
     deleteContact.mutate(
@@ -136,6 +156,31 @@ export default function ContactDetail() {
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {(contact as { optedOut?: boolean }).optedOut ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 text-green-700 hover:bg-green-50 border-green-300"
+              onClick={() => toggleOptOut.mutate(false)}
+              disabled={toggleOptOut.isPending}
+              data-testid="button-opt-in"
+            >
+              <Bell className="w-4 h-4" />
+              Opt In
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 text-amber-700 hover:bg-amber-50 border-amber-300"
+              onClick={() => toggleOptOut.mutate(true)}
+              disabled={toggleOptOut.isPending}
+              data-testid="button-opt-out"
+            >
+              <BellOff className="w-4 h-4" />
+              Opt Out
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"

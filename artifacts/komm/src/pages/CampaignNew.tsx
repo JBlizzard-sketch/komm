@@ -69,14 +69,20 @@ function applyVars(text: string) {
   return text.replace(/\{\{(\w+)\}\}/g, (_, key) => SAMPLE_VARS[key] ?? `{{${key}}}`);
 }
 
-function MessagePreview({ channel, body }: { channel: string; body: string }) {
+function MessagePreview({ channel, body, subject }: { channel: string; body: string; subject?: string }) {
   const preview = applyVars(body);
   if (channel === "email") {
     return (
       <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
         <p className="font-medium text-foreground mb-1.5">Preview (sample values)</p>
-        <div className="bg-white border rounded p-3 text-sm text-foreground whitespace-pre-wrap leading-relaxed">
-          {preview}
+        <div className="bg-white border rounded overflow-hidden text-sm text-foreground">
+          {subject && (
+            <div className="border-b px-3 py-2 bg-muted/40">
+              <span className="text-muted-foreground text-xs mr-2">Subject:</span>
+              <span className="font-medium">{applyVars(subject)}</span>
+            </div>
+          )}
+          <div className="p-3 whitespace-pre-wrap leading-relaxed">{preview}</div>
         </div>
       </div>
     );
@@ -383,6 +389,11 @@ export default function CampaignNew() {
                     {chars} chars · {segments} SMS segment{segments !== 1 ? "s" : ""}
                   </span>
                 )}
+                {channel === "whatsapp" && body.length > 0 && (
+                  <span className={`text-xs ${chars > 4096 ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                    {chars.toLocaleString()} / 4,096 chars
+                  </span>
+                )}
               </div>
               <div className="flex flex-wrap gap-1.5 mb-1.5">
                 {["name", "amount", "date", "balance", "due", "org_name"].map((v) => (
@@ -412,7 +423,7 @@ export default function CampaignNew() {
           )} />
 
           {body.length > 0 && (
-            <MessagePreview channel={channel} body={body} />
+            <MessagePreview channel={channel} body={body} subject={form.watch("subject")} />
           )}
 
           <div>

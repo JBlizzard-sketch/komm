@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
 import {
   Plus, Send, Clock, CheckCircle2, XCircle, FileText,
-  MoreHorizontal, Trash2, ChevronLeft, ChevronRight, Search,
+  MoreHorizontal, Trash2, ChevronLeft, ChevronRight, Search, Copy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,10 +15,11 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  useListCampaigns, useDeleteCampaign, useSendCampaign,
+  useListCampaigns, useDeleteCampaign, useSendCampaign, useDuplicateCampaign,
   getListCampaignsQueryKey, getGetDashboardStatsQueryKey, getGetDashboardActivityQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { format, formatDistanceToNow, isPast } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import type { Campaign } from "@workspace/api-client-react";
@@ -42,8 +43,10 @@ const CHANNEL_CONFIG: Record<string, { label: string; color: string }> = {
 function CampaignRow({ campaign }: { campaign: Campaign }) {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const deleteCampaign = useDeleteCampaign();
   const sendCampaign = useSendCampaign();
+  const duplicateCampaign = useDuplicateCampaign();
   const status = STATUS_CONFIG[campaign.status] ?? STATUS_CONFIG.draft;
   const StatusIcon = status.icon;
   const channel = CHANNEL_CONFIG[campaign.channel] ?? CHANNEL_CONFIG.sms;
@@ -72,6 +75,20 @@ function CampaignRow({ campaign }: { campaign: Campaign }) {
           toast({ title: "Campaign sent successfully" });
         },
         onError: () => toast({ title: "Failed to send campaign", variant: "destructive" }),
+      }
+    );
+  };
+
+  const handleDuplicate = () => {
+    duplicateCampaign.mutate(
+      { id: campaign.id },
+      {
+        onSuccess: (data) => {
+          qc.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
+          toast({ title: "Campaign duplicated as draft" });
+          navigate(`/campaigns/new?edit=${data.id}`);
+        },
+        onError: () => toast({ title: "Failed to duplicate campaign", variant: "destructive" }),
       }
     );
   };
@@ -164,6 +181,14 @@ function CampaignRow({ campaign }: { campaign: Campaign }) {
               </DropdownMenuItem>
             </>
           )}
+          <DropdownMenuItem
+            onClick={handleDuplicate}
+            disabled={duplicateCampaign.isPending}
+            data-testid={`duplicate-campaign-${campaign.id}`}
+          >
+            <Copy className="w-4 h-4 mr-2" />
+            Duplicate
+          </DropdownMenuItem>
           <DropdownMenuItem
             onClick={handleDelete}
             className="text-destructive"
