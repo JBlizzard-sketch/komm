@@ -162,6 +162,56 @@ router.delete("/campaigns/:id", async (req, res) => {
   return res.status(204).send();
 });
 
+router.post("/campaigns/:id/resend-failed", async (req, res) => {
+  const { id } = GetCampaignParams.parse(req.params);
+  const [original] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, id));
+  if (!original) return res.status(404).json({ error: "Not found" });
+
+  const failedRows = await db
+    .select({
+      contactId: campaignMessagesTable.contactId,
+      contactName: contactsTable.name,
+      phone: contactsTable.phone,
+    })
+    .from(campaignMessagesTable)
+    .innerJoin(contactsTable, eq(campaignMessagesTable.contactId, contactsTable.id))
+    .where(and(eq(campaignMessagesTable.campaignId, id), eq(campaignMessagesTable.status, "failed")));
+
+  // Deduplicate by contactId
+  const seen = new Set<number>();
+  const uniqueRows = failedRows.filter((r) => {
+    if (r.contactId === null || seen.has(r.contactId)) return false;
+    seen.add(r.contactId);
+    return true;
+  });
+  if (uniqueRows.length === 0) return res.status(400).json({ error: "No failed contacts to retry" });
+
+  const [newCampaign] = await db
+    .insert(campaignsTable)
+    .values({
+      name: `${original.name} (Retry)`,
+      channel: original.channel,
+      status: "draft",
+      body: original.body,
+      templateId: original.templateId,
+      groupIds: original.groupIds ?? [],
+      recipientCount: uniqueRows.length,
+    })
+    .returning();
+
+  await db.insert(campaignMessagesTable).values(
+    uniqueRows.map((r) => ({
+      campaignId: newCampaign.id,
+      contactId: r.contactId as number,
+      contactName: r.contactName,
+      phone: r.phone,
+      status: "pending" as const,
+    }))
+  );
+
+  return res.status(201).json(newCampaign);
+});
+
 router.post("/campaigns/:id/opt-out-failed", async (req, res) => {
   const { id } = GetCampaignParams.parse(req.params);
   const failedContacts = await db

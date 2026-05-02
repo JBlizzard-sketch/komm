@@ -85,6 +85,22 @@ function CampaignRow({ campaign }: { campaign: Campaign }) {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-foreground truncate">{campaign.name}</p>
           <p className="text-xs text-muted-foreground mt-0.5 truncate">{campaign.body}</p>
+          {(campaign.status === "sent" || campaign.status === "sending") && (campaign.recipientCount ?? 0) > 0 && (() => {
+            const delivered = campaign.deliveredCount ?? 0;
+            const failed = campaign.failedCount ?? 0;
+            const total = campaign.recipientCount ?? 1;
+            const delivPct = Math.round((delivered / total) * 100);
+            const failPct = Math.round((failed / total) * 100);
+            return (
+              <div className="flex items-center gap-2 mt-1.5">
+                <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden flex">
+                  <div className="h-full bg-green-500 transition-all" style={{ width: `${delivPct}%` }} />
+                  <div className="h-full bg-red-400 transition-all" style={{ width: `${failPct}%` }} />
+                </div>
+                <span className="text-[10px] text-muted-foreground shrink-0">{delivPct}% delivered</span>
+              </div>
+            );
+          })()}
         </div>
       </Link>
 

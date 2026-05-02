@@ -1,5 +1,5 @@
-import { useState, useRef } from "react";
-import { Plus, FileText, Trash2, Edit2, Tag, Send } from "lucide-react";
+import { useState, useRef, useMemo } from "react";
+import { Plus, FileText, Trash2, Edit2, Tag, Send, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -73,6 +73,8 @@ export default function Templates() {
   const [channelFilter, setChannelFilter] = useState<string>("all");
   const [showCreate, setShowCreate] = useState(false);
   const [editTemplate, setEditTemplate] = useState<Template | null>(null);
+  const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null);
+  const [sampleValues, setSampleValues] = useState<Record<string, string>>({});
   const qc = useQueryClient();
   const { toast } = useToast();
   const [, navigate] = useLocation();
@@ -151,6 +153,20 @@ export default function Templates() {
     navigate(`/campaigns/new?channel=${t.channel}&templateId=${t.id}`);
   };
 
+  const openPreview = (t: Template) => {
+    const vars = t.variables ?? [];
+    const defaults: Record<string, string> = { name: "Wanjiku Njoroge", amount: "5,000", date: "31 May 2026", balance: "12,500", due: "1 June 2026", org_name: "Umoja SACCO" };
+    const initial: Record<string, string> = {};
+    vars.forEach((v) => { initial[v] = defaults[v] ?? `[${v}]`; });
+    setSampleValues(initial);
+    setPreviewTemplate(t);
+  };
+
+  const renderPreview = useMemo(() => {
+    if (!previewTemplate) return "";
+    return previewTemplate.body.replace(/\{\{(\w+)\}\}/g, (_, key: string) => sampleValues[key] ?? `{{${key}}}`);
+  }, [previewTemplate, sampleValues]);
+
   return (
     <div className="p-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-6">
@@ -225,6 +241,14 @@ export default function Templates() {
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                     <button
+                      onClick={() => openPreview(t)}
+                      title="Preview"
+                      data-testid={`preview-template-${t.id}`}
+                      className="w-7 h-7 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                    </button>
+                    <button
                       onClick={() => useInCampaign(t)}
                       title="Use in campaign"
                       data-testid={`use-template-${t.id}`}
@@ -258,7 +282,17 @@ export default function Templates() {
                   </div>
                 )}
 
-                <div className="mt-4 pt-3 border-t border-border flex justify-end">
+                <div className="mt-4 pt-3 border-t border-border flex justify-between">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-xs gap-1.5 text-muted-foreground"
+                    onClick={() => openPreview(t)}
+                    data-testid={`preview-template-btn-${t.id}`}
+                  >
+                    <Eye className="w-3 h-3" />
+                    Preview
+                  </Button>
                   <Button
                     size="sm"
                     variant="outline"
@@ -373,6 +407,58 @@ export default function Templates() {
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Template Preview Dialog */}
+      <Dialog open={!!previewTemplate} onOpenChange={(o) => { if (!o) setPreviewTemplate(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Eye className="w-4 h-4" />
+              Preview — {previewTemplate?.name}
+            </DialogTitle>
+          </DialogHeader>
+          {previewTemplate && (
+            <div className="space-y-4">
+              {/* Sample value inputs */}
+              {(previewTemplate.variables ?? []).length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Sample values</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(previewTemplate.variables ?? []).map((v) => (
+                      <div key={v}>
+                        <label className="text-[11px] text-muted-foreground font-mono mb-0.5 block">{`{{${v}}}`}</label>
+                        <Input
+                          value={sampleValues[v] ?? ""}
+                          onChange={(e) => setSampleValues((prev) => ({ ...prev, [v]: e.target.value }))}
+                          className="h-7 text-xs"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* Rendered preview */}
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Rendered message</p>
+                <div className="bg-muted/50 border border-border rounded-lg p-4 text-sm text-foreground whitespace-pre-wrap leading-relaxed min-h-[80px]">
+                  {renderPreview}
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-1.5">
+                  {renderPreview.length} characters
+                  {previewTemplate.channel === "sms" && ` · ${Math.ceil(renderPreview.length / 160)} SMS segment${Math.ceil(renderPreview.length / 160) !== 1 ? "s" : ""}`}
+                </p>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" size="sm" onClick={() => setPreviewTemplate(null)}>Close</Button>
+                <Button size="sm" className="gap-1.5" onClick={() => { setPreviewTemplate(null); useInCampaign(previewTemplate); }}>
+                  <Send className="w-3.5 h-3.5" />
+                  Use in Campaign
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

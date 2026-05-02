@@ -1030,6 +1030,10 @@ components:
             type: integer
         recipientCount:
           type: integer
+        deliveredCount:
+          type: integer
+        failedCount:
+          type: integer
         scheduledAt:
           type: string
           format: date-time

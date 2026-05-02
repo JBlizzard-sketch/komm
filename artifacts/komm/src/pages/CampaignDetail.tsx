@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useLocation } from "wouter";
 import {
   ArrowLeft, CheckCircle2, XCircle, Clock, Send as SendIcon,
-  Users, Copy, FlaskConical, Phone, Mail, CalendarOff, Edit2, ChevronLeft, ChevronRight, Loader2, Download, BellOff,
+  Users, Copy, FlaskConical, Phone, Mail, CalendarOff, Edit2, ChevronLeft, ChevronRight, Loader2, Download, BellOff, RefreshCw,
 } from "lucide-react";
 import { Link } from "wouter";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -82,6 +83,25 @@ export default function CampaignDetail() {
 
   const [cancelling, setCancelling] = useState(false);
   const [optingOutFailed, setOptingOutFailed] = useState(false);
+
+  const [resendingFailed, setResendingFailed] = useState(false);
+
+  const handleResendFailed = async () => {
+    if (!window.confirm(`Create a new draft campaign targeting only the ${campaign?.failedCount ?? 0} failed contacts?`)) return;
+    setResendingFailed(true);
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}/resend-failed`, { method: "POST" });
+      if (!res.ok) { const e = await res.json() as { error: string }; throw new Error(e.error); }
+      const newCampaign = await res.json() as { id: number };
+      qc.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
+      toast({ title: "Retry campaign created as draft" });
+      navigate(`/campaigns/${newCampaign.id}`);
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "Failed to create retry campaign", variant: "destructive" });
+    } finally {
+      setResendingFailed(false);
+    }
+  };
 
   const handleOptOutFailed = async () => {
     if (!window.confirm("Opt out all contacts with failed delivery? They won't receive future campaigns.")) return;
@@ -279,6 +299,19 @@ export default function CampaignDetail() {
               Edit
             </Button>
           )}
+          {(campaign.failedCount ?? 0) > 0 && campaign.status === "sent" && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 text-amber-700 border-amber-300 hover:bg-amber-50"
+              onClick={handleResendFailed}
+              disabled={resendingFailed}
+              data-testid="button-resend-failed"
+            >
+              <RefreshCw className="w-4 h-4" />
+              {resendingFailed ? "Creating…" : `Retry Failed (${campaign.failedCount})`}
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -335,38 +368,69 @@ export default function CampaignDetail() {
           <span className="text-xs text-blue-700 font-medium">Sending in progress — stats refresh automatically every 5 seconds</span>
         </div>
       )}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-foreground">{campaign.recipientCount.toLocaleString()}</p>
-            <p className="text-xs text-muted-foreground mt-1">Recipients</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-green-600">{campaign.deliveredCount ?? 0}</p>
-            <p className="text-xs text-muted-foreground mt-1">Delivered</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-blue-600">{awaitingCount}</p>
-            <p className="text-xs text-muted-foreground mt-1">Awaiting</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-red-600">{campaign.failedCount ?? 0}</p>
-            <p className="text-xs text-muted-foreground mt-1">Failed</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-primary">{deliveryPct}%</p>
-            <p className="text-xs text-muted-foreground mt-1">Delivery Rate</p>
-          </CardContent>
-        </Card>
-      </div>
+      {(() => {
+        const delivered = campaign.deliveredCount ?? 0;
+        const failed = campaign.failedCount ?? 0;
+        const awaiting = awaitingCount;
+        const hasPie = (delivered + failed + awaiting) > 0;
+        const pieData = [
+          { name: "Delivered", value: delivered, color: "#16a34a" },
+          { name: "Failed",    value: failed,    color: "#dc2626" },
+          { name: "Awaiting",  value: awaiting,  color: "#3b82f6" },
+        ].filter((d) => d.value > 0);
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            {/* Donut chart */}
+            <Card className="flex flex-col items-center justify-center py-4">
+              <CardContent className="p-0 flex flex-col items-center w-full">
+                {hasPie ? (
+                  <>
+                    <ResponsiveContainer width="100%" height={140}>
+                      <PieChart>
+                        <Pie data={pieData} cx="50%" cy="50%" innerRadius={42} outerRadius={62} dataKey="value" strokeWidth={0}>
+                          {pieData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                        </Pie>
+                        <Tooltip formatter={(v: number, name: string) => [v.toLocaleString(), name]} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="flex gap-3 mt-1">
+                      {pieData.map((d) => (
+                        <span key={d.name} className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                          <span className="w-2 h-2 rounded-full inline-block shrink-0" style={{ background: d.color }} />
+                          {d.name}
+                        </span>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-xs text-muted-foreground py-10">No messages sent yet</p>
+                )}
+              </CardContent>
+            </Card>
+            {/* Stat numbers */}
+            <Card className="md:col-span-2">
+              <CardContent className="p-5 grid grid-cols-2 sm:grid-cols-4 gap-4 h-full items-center">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-foreground">{campaign.recipientCount.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground mt-1">Recipients</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-green-600">{delivered.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground mt-1">Delivered</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-red-600">{failed.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground mt-1">Failed</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-primary">{deliveryPct}%</p>
+                  <p className="text-xs text-muted-foreground mt-1">Delivery Rate</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        );
+      })()}
 
       {/* Message preview */}
       <Card className="mb-6">

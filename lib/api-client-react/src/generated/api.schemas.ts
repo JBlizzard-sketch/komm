@@ -189,6 +189,8 @@ export interface Campaign {
   templateId?: number | null;
   groupIds?: number[];
   recipientCount: number;
+  deliveredCount?: number;
+  failedCount?: number;
   scheduledAt?: string | null;
   sentAt?: string | null;
   createdAt: string;
