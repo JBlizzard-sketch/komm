@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MessageSquare, CheckCheck, Inbox as InboxIcon } from "lucide-react";
+import { MessageSquare, CheckCheck, Inbox as InboxIcon, CheckSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,7 @@ const CHANNEL_COLORS: Record<string, string> = {
 
 export default function Inbox() {
   const [readFilter, setReadFilter] = useState<string>("all");
+  const [markingAll, setMarkingAll] = useState(false);
   const qc = useQueryClient();
   const { toast } = useToast();
 
@@ -56,6 +57,23 @@ export default function Inbox() {
     );
   };
 
+  const handleMarkAllRead = async () => {
+    if (markingAll || (data?.unreadCount ?? 0) === 0) return;
+    setMarkingAll(true);
+    try {
+      await fetch("/api/inbox/read-all", { method: "POST" });
+      qc.invalidateQueries({ queryKey: getListInboxMessagesQueryKey() });
+      qc.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() });
+      toast({ title: "All messages marked as read" });
+    } catch {
+      toast({ title: "Failed to mark all as read", variant: "destructive" });
+    } finally {
+      setMarkingAll(false);
+    }
+  };
+
+  const unreadCount = data?.unreadCount ?? 0;
+
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-6">
@@ -63,31 +81,47 @@ export default function Inbox() {
           <h1 className="text-xl font-semibold">Inbox</h1>
           <div className="flex items-center gap-2 mt-0.5">
             <span className="text-sm text-muted-foreground">Two-way replies from your members</span>
-            {(data?.unreadCount ?? 0) > 0 && (
-              <Badge className="bg-amber-500 text-white text-xs">{data?.unreadCount} unread</Badge>
+            {unreadCount > 0 && (
+              <Badge className="bg-amber-500 text-white text-xs">{unreadCount} unread</Badge>
             )}
           </div>
         </div>
-        {/* Filter tabs */}
-        <div className="flex gap-1 bg-muted rounded-lg p-1">
-          {[
-            { value: "all", label: "All" },
-            { value: "unread", label: "Unread" },
-            { value: "read", label: "Read" },
-          ].map((f) => (
-            <button
-              key={f.value}
-              data-testid={`inbox-filter-${f.value}`}
-              onClick={() => setReadFilter(f.value)}
-              className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                readFilter === f.value
-                  ? "bg-background shadow-sm text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
+
+        <div className="flex items-center gap-2">
+          {unreadCount > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 text-xs h-8"
+              onClick={handleMarkAllRead}
+              disabled={markingAll}
+              data-testid="button-mark-all-read"
             >
-              {f.label}
-            </button>
-          ))}
+              <CheckSquare className="w-3.5 h-3.5" />
+              {markingAll ? "Marking…" : `Mark all read (${unreadCount})`}
+            </Button>
+          )}
+
+          <div className="flex gap-1 bg-muted rounded-lg p-1">
+            {[
+              { value: "all", label: "All" },
+              { value: "unread", label: "Unread" },
+              { value: "read", label: "Read" },
+            ].map((f) => (
+              <button
+                key={f.value}
+                data-testid={`inbox-filter-${f.value}`}
+                onClick={() => setReadFilter(f.value)}
+                className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                  readFilter === f.value
+                    ? "bg-background shadow-sm text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -121,7 +155,6 @@ export default function Inbox() {
                     !msg.read ? "bg-primary/5" : "hover:bg-muted/20"
                   }`}
                 >
-                  {/* Avatar */}
                   <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center shrink-0 text-sm font-semibold text-muted-foreground">
                     {(msg.contactName ?? msg.from).charAt(0).toUpperCase()}
                   </div>
@@ -147,7 +180,7 @@ export default function Inbox() {
                     </p>
                   </div>
 
-                  {!msg.read && (
+                  {!msg.read ? (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -159,8 +192,7 @@ export default function Inbox() {
                       <CheckCheck className="w-3.5 h-3.5" />
                       Mark read
                     </Button>
-                  )}
-                  {msg.read && (
+                  ) : (
                     <CheckCheck className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
                   )}
                 </div>

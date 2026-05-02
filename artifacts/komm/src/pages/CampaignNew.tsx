@@ -52,6 +52,8 @@ export default function CampaignNew() {
   const search = useSearch();
   const params = new URLSearchParams(search);
   const editId = params.get("edit") ? parseInt(params.get("edit")!) : null;
+  const fromTemplateId = params.get("templateId") ? parseInt(params.get("templateId")!) : null;
+  const fromChannel = (params.get("channel") ?? "") as "sms" | "whatsapp" | "email" | "";
 
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -71,8 +73,26 @@ export default function CampaignNew() {
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: "", channel: "sms", body: "", templateId: null, groupIds: [], scheduledAt: "" },
+    defaultValues: {
+      name: "",
+      channel: fromChannel || "sms",
+      body: "",
+      templateId: null,
+      groupIds: [],
+      scheduledAt: "",
+    },
   });
+
+  // Pre-select template from URL param (e.g. ?templateId=3&channel=sms)
+  useEffect(() => {
+    if (!fromTemplateId || !templates) return;
+    const tmpl = templates.find((t) => t.id === fromTemplateId);
+    if (tmpl) {
+      form.setValue("templateId", tmpl.id);
+      form.setValue("body", tmpl.body);
+      if (fromChannel) form.setValue("channel", fromChannel);
+    }
+  }, [fromTemplateId, templates]);
 
   // Pre-fill form when editing an existing campaign
   useEffect(() => {

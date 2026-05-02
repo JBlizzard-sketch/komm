@@ -43,6 +43,15 @@ router.get("/inbox", async (req, res) => {
   });
 });
 
+router.post("/inbox/read-all", async (req, res) => {
+  const result = await db
+    .update(inboxMessagesTable)
+    .set({ read: true })
+    .where(eq(inboxMessagesTable.read, false))
+    .returning({ id: inboxMessagesTable.id });
+  return res.json({ marked: result.length });
+});
+
 router.post("/inbox/:id/read", async (req, res) => {
   const { id } = MarkInboxReadParams.parse(req.params);
   const [message] = await db

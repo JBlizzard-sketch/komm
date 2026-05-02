@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, FileText, Trash2, Edit2, Tag } from "lucide-react";
+import { Plus, FileText, Trash2, Edit2, Tag, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +33,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
 import type { Template } from "@workspace/api-client-react";
 
 const schema = z.object({
@@ -74,6 +75,7 @@ export default function Templates() {
   const [editTemplate, setEditTemplate] = useState<Template | null>(null);
   const qc = useQueryClient();
   const { toast } = useToast();
+  const [, navigate] = useLocation();
 
   const { data: templates, isLoading } = useListTemplates(
     {
@@ -143,6 +145,10 @@ export default function Templates() {
       { id },
       { onSuccess: () => { qc.invalidateQueries({ queryKey: getListTemplatesQueryKey() }); toast({ title: "Template deleted" }); } }
     );
+  };
+
+  const useInCampaign = (t: Template) => {
+    navigate(`/campaigns/new?channel=${t.channel}&templateId=${t.id}`);
   };
 
   return (
@@ -218,6 +224,14 @@ export default function Templates() {
                     </div>
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                    <button
+                      onClick={() => useInCampaign(t)}
+                      title="Use in campaign"
+                      data-testid={`use-template-${t.id}`}
+                      className="w-7 h-7 flex items-center justify-center rounded text-muted-foreground hover:text-primary hover:bg-primary/10"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                    </button>
                     <button onClick={() => openEdit(t)} data-testid={`edit-template-${t.id}`}
                       className="w-7 h-7 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted">
                       <Edit2 className="w-3.5 h-3.5" />
@@ -243,6 +257,19 @@ export default function Templates() {
                     ))}
                   </div>
                 )}
+
+                <div className="mt-4 pt-3 border-t border-border flex justify-end">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs gap-1.5"
+                    onClick={() => useInCampaign(t)}
+                    data-testid={`use-template-btn-${t.id}`}
+                  >
+                    <Send className="w-3 h-3" />
+                    Use in Campaign
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
