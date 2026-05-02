@@ -620,8 +620,11 @@ export default function Contacts() {
                     {contact.email && <p className="text-xs text-muted-foreground truncate">{contact.email}</p>}
                   </div>
                   <span className="text-sm text-muted-foreground w-32 shrink-0">{contact.phone}</span>
-                  <div className="w-24">
+                  <div className="w-24 flex flex-col gap-1">
                     <Badge variant="outline" className={`text-[11px] capitalize ${CHANNEL_CONFIG[contact.channel] ?? ""}`}>{contact.channel}</Badge>
+                    {contact.optedOut && (
+                      <Badge variant="outline" className="text-[10px] bg-red-50 text-red-700 border-red-200">Opted Out</Badge>
+                    )}
                   </div>
                   <div className="flex-1 flex flex-wrap gap-1">
                     {(contact.groupIds ?? []).slice(0, 3).map((gid) => { const g = groups?.find((gr) => gr.id === gid); return g ? (<Badge key={gid} variant="outline" className="text-[10px]">{g.name}</Badge>) : null; })}

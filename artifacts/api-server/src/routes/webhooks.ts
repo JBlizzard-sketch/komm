@@ -2,7 +2,7 @@
  * Webhooks from Africa's Talking and WhatsApp Cloud API
  */
 import { Router } from "express";
-import { db, campaignMessagesTable, inboxMessagesTable } from "@workspace/db";
+import { db, campaignMessagesTable, inboxMessagesTable, contactsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { logger } from "../lib/logger";
 
@@ -60,12 +60,23 @@ router.post("/webhooks/at/inbox", async (req, res) => {
 
   if (!from || !text) return res.status(400).json({ error: "Missing required fields" });
 
+  const isStop = /^stop\b/i.test(text.trim());
+
   try {
+    if (isStop) {
+      // Honour opt-out: mark contact as opted out by phone number
+      await db
+        .update(contactsTable)
+        .set({ optedOut: true })
+        .where(eq(contactsTable.phone, from));
+      req.log.info({ from }, "Contact opted out via STOP SMS");
+    }
+
     await db.insert(inboxMessagesTable).values({
       from,
       body: text,
       channel: "sms",
-      read: false,
+      read: isStop, // auto-read STOP messages
       receivedAt: date ? new Date(date) : new Date(),
     });
     return res.json({ success: true });
@@ -135,12 +146,21 @@ router.post("/webhooks/whatsapp", async (req, res) => {
   if (changes.messages) {
     for (const msg of changes.messages) {
       if (msg.type !== "text" || !msg.text?.body) continue;
+      const isStop = /^stop\b/i.test(msg.text.body.trim());
       try {
+        if (isStop) {
+          await db
+            .update(contactsTable)
+            .set({ optedOut: true })
+            .where(eq(contactsTable.phone, msg.from));
+          logger.info({ from: msg.from }, "Contact opted out via STOP WhatsApp");
+        }
+
         await db.insert(inboxMessagesTable).values({
           from: msg.from,
           body: msg.text.body,
           channel: "whatsapp",
-          read: false,
+          read: isStop,
           receivedAt: new Date(parseInt(msg.timestamp) * 1000),
         });
       } catch (err) {

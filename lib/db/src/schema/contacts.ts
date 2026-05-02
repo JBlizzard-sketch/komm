@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, jsonb, integer } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, jsonb, integer, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -9,6 +9,7 @@ export const contactsTable = pgTable("contacts", {
   email: text("email"),
   channel: text("channel").notNull().default("sms"),
   customFields: jsonb("custom_fields").$type<Record<string, string>>(),
+  optedOut: boolean("opted_out").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

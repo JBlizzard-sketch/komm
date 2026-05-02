@@ -46,7 +46,7 @@ async function processDueCampaigns() {
               channel: contactsTable.channel,
             })
             .from(contactsTable)
-            .where(inArray(contactsTable.id, contactIds));
+            .where(and(inArray(contactsTable.id, contactIds), eq(contactsTable.optedOut, false)));
         }
       }
 
