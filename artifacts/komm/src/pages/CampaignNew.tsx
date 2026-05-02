@@ -61,6 +61,7 @@ const SAMPLE_VARS: Record<string, string> = {
   date: new Date().toLocaleDateString("en-KE", { day: "numeric", month: "long", year: "numeric" }),
   balance: "KES 12,400",
   due: new Date(Date.now() + 7 * 86400000).toLocaleDateString("en-KE", { day: "numeric", month: "long" }),
+  org_name: "Your Organisation",
 };
 
 function applyVars(text: string) {
@@ -364,7 +365,7 @@ export default function CampaignNew() {
                 )}
               </div>
               <div className="flex flex-wrap gap-1.5 mb-1.5">
-                {["name", "amount", "date", "balance", "due"].map((v) => (
+                {["name", "amount", "date", "balance", "due", "org_name"].map((v) => (
                   <button key={v} type="button" onClick={() => insertVar(v)}
                     className="px-2 py-0.5 rounded border border-dashed border-primary/40 text-xs text-primary/80 hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors font-mono">
                     {`{{${v}}}`}

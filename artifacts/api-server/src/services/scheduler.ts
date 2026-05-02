@@ -3,8 +3,8 @@
  * Polls every minute for campaigns with scheduledAt <= now and status = 'scheduled'.
  * Triggers the send flow for each one found.
  */
-import { db, campaignsTable, campaignMessagesTable, contactsTable, contactGroupsTable } from "@workspace/db";
-import { eq, lte, inArray, and } from "drizzle-orm";
+import { db, campaignsTable, campaignMessagesTable, contactsTable, contactGroupsTable, orgSettingsTable } from "@workspace/db";
+import { eq, lte, inArray, and, sql } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { sendMessage } from "./messaging";
 
@@ -51,6 +51,10 @@ async function processDueCampaigns() {
         }
       }
 
+      // Fetch org name for variable substitution
+      const orgNameRow = await db.select().from(orgSettingsTable).where(eq(orgSettingsTable.key, "org_name"));
+      const orgName = orgNameRow[0]?.value ?? "";
+
       // Variable substitution helper (mirrors campaigns route)
       const substituteVars = (template: string, contact: typeof contacts[number]) => {
         const today = new Date();
@@ -62,6 +66,7 @@ async function processDueCampaigns() {
           due: fmt(due),
           amount: contact.customFields?.["amount"] ?? "",
           balance: contact.customFields?.["balance"] ?? "",
+          org_name: orgName,
         };
         const vars = { ...defaults, ...(contact.customFields ?? {}) };
         return template.replace(/{{(\w+)}}/g, (_, key: string) => vars[key] ?? `{{${key}}}`);

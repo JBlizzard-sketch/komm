@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Link } from "wouter";
 import {
-  CheckCheck, Inbox as InboxIcon, CheckSquare, ChevronLeft, ChevronRight, UserCircle, Reply,
+  CheckCheck, Inbox as InboxIcon, CheckSquare, ChevronLeft, ChevronRight, UserCircle, Reply, Search, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -32,10 +33,18 @@ export default function Inbox() {
   const [readFilter, setReadFilter] = useState<string>("all");
   const [markingAll, setMarkingAll] = useState(false);
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [replyMsg, setReplyMsg] = useState<{ id: number; name: string; channel: string } | null>(null);
   const [replyBody, setReplyBody] = useState("");
   const qc = useQueryClient();
   const { toast } = useToast();
+
+  const handleSearchChange = useCallback((val: string) => {
+    setSearch(val);
+    const t = setTimeout(() => { setDebouncedSearch(val); setPage(1); }, 300);
+    return () => clearTimeout(t);
+  }, []);
 
   const sendReply = useMutation({
     mutationFn: async ({ id, body }: { id: number; body: string }) => {
@@ -71,7 +80,18 @@ export default function Inbox() {
   };
 
   const { data, isLoading } = useListInboxMessages(queryArgs, {
-    query: { queryKey: getListInboxMessagesQueryKey(queryArgs) },
+    query: {
+      queryKey: [...getListInboxMessagesQueryKey(queryArgs), debouncedSearch],
+      queryFn: async () => {
+        const qs = new URLSearchParams();
+        if (queryArgs.read !== undefined) qs.set("read", String(queryArgs.read));
+        qs.set("page", String(queryArgs.page));
+        qs.set("limit", String(queryArgs.limit));
+        if (debouncedSearch) qs.set("search", debouncedSearch);
+        const res = await fetch(`/api/inbox?${qs}`);
+        return res.json();
+      },
+    },
   });
 
   const markRead = useMarkInboxRead();
@@ -108,7 +128,7 @@ export default function Inbox() {
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  const handleFilterChange = (v: string) => { setReadFilter(v); setPage(1); };
+  const handleFilterChange = (v: string) => { setReadFilter(v); setPage(1); setSearch(""); setDebouncedSearch(""); };
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -123,7 +143,27 @@ export default function Inbox() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+            <Input
+              value={search}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="Search by name or number…"
+              className="h-8 pl-8 pr-7 text-sm w-52"
+              data-testid="inbox-search"
+            />
+            {search && (
+              <button
+                onClick={() => handleSearchChange("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
           {unreadCount > 0 && (
             <Button
               variant="outline"

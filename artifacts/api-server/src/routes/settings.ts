@@ -1,4 +1,6 @@
 import { Router, type IRouter } from "express";
+import { db, orgSettingsTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 import { isSimulated, sendMessage } from "../services/messaging";
 
 const router: IRouter = Router();
@@ -32,6 +34,40 @@ router.post("/settings/test/:channel", async (req, res) => {
     error: result.error ?? null,
     channel,
   });
+});
+
+const PROFILE_KEYS = ["org_name", "org_timezone", "sender_name"] as const;
+
+router.get("/settings/profile", async (_req, res) => {
+  const rows = await db.select().from(orgSettingsTable);
+  const profile: Record<string, string> = {};
+  for (const row of rows) {
+    if (PROFILE_KEYS.includes(row.key as typeof PROFILE_KEYS[number])) {
+      profile[row.key] = row.value;
+    }
+  }
+  return res.json({
+    orgName: profile["org_name"] ?? "",
+    orgTimezone: profile["org_timezone"] ?? "Africa/Nairobi",
+    senderName: profile["sender_name"] ?? "",
+  });
+});
+
+router.put("/settings/profile", async (req, res) => {
+  const body = req.body as { orgName?: string; orgTimezone?: string; senderName?: string };
+  const updates: { key: string; value: string }[] = [];
+  if (typeof body.orgName === "string") updates.push({ key: "org_name", value: body.orgName.trim() });
+  if (typeof body.orgTimezone === "string") updates.push({ key: "org_timezone", value: body.orgTimezone.trim() });
+  if (typeof body.senderName === "string") updates.push({ key: "sender_name", value: body.senderName.trim() });
+
+  for (const { key, value } of updates) {
+    await db
+      .insert(orgSettingsTable)
+      .values({ key, value })
+      .onConflictDoUpdate({ target: orgSettingsTable.key, set: { value } });
+  }
+
+  return res.json({ ok: true });
 });
 
 export default router;

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Settings2,
   MessageSquare,
@@ -13,12 +13,16 @@ import {
   FlaskConical,
   Copy,
   Check,
+  Building2,
+  Save,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 
 function WebhookPanel({ path }: { path: string }) {
   const [copied, setCopied] = useState(false);
@@ -218,6 +222,130 @@ function IntegrationCard({
   );
 }
 
+interface OrgProfile { orgName: string; orgTimezone: string; senderName: string }
+
+function OrgProfileCard() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data, isLoading } = useQuery<OrgProfile>({
+    queryKey: ["settings-profile"],
+    queryFn: async () => { const r = await fetch("/api/settings/profile"); return r.json(); },
+    staleTime: 60_000,
+  });
+
+  const [orgName, setOrgName] = useState("");
+  const [senderName, setSenderName] = useState("");
+  const [orgTimezone, setOrgTimezone] = useState("Africa/Nairobi");
+
+  useEffect(() => {
+    if (data) {
+      setOrgName(data.orgName ?? "");
+      setSenderName(data.senderName ?? "");
+      setOrgTimezone(data.orgTimezone ?? "Africa/Nairobi");
+    }
+  }, [data]);
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/settings/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgName, senderName, orgTimezone }),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["settings-profile"] });
+      toast({ title: "Organisation profile saved" });
+    },
+    onError: () => toast({ title: "Failed to save profile", variant: "destructive" }),
+  });
+
+  const isDirty = data
+    ? orgName !== (data.orgName ?? "") || senderName !== (data.senderName ?? "") || orgTimezone !== (data.orgTimezone ?? "Africa/Nairobi")
+    : false;
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-primary/10">
+            <Building2 className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <CardTitle className="text-base">Organisation Profile</CardTitle>
+            <CardDescription className="text-xs mt-0.5">
+              Your org name is available as <code className="font-mono bg-muted px-1 rounded">{"{{org_name}}"}</code> in all message templates.
+            </CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isLoading ? (
+          <div className="space-y-3">
+            {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-foreground">Organisation Name</label>
+                <Input
+                  value={orgName}
+                  onChange={(e) => setOrgName(e.target.value)}
+                  placeholder="Mwangaza SACCO"
+                  className="h-9 text-sm"
+                  data-testid="input-org-name"
+                />
+                <p className="text-[11px] text-muted-foreground">Used in messages as {"{{org_name}}"}</p>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-foreground">Sender Display Name <span className="font-normal text-muted-foreground">(optional)</span></label>
+                <Input
+                  value={senderName}
+                  onChange={(e) => setSenderName(e.target.value)}
+                  placeholder="Mwangaza SACCO Alerts"
+                  className="h-9 text-sm"
+                />
+                <p className="text-[11px] text-muted-foreground">Shown as the sender name in email campaigns</p>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-foreground">Timezone</label>
+                <select
+                  value={orgTimezone}
+                  onChange={(e) => setOrgTimezone(e.target.value)}
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="Africa/Nairobi">Africa/Nairobi (EAT, UTC+3)</option>
+                  <option value="Africa/Lagos">Africa/Lagos (WAT, UTC+1)</option>
+                  <option value="Africa/Johannesburg">Africa/Johannesburg (SAST, UTC+2)</option>
+                  <option value="Africa/Accra">Africa/Accra (GMT, UTC+0)</option>
+                  <option value="Africa/Cairo">Africa/Cairo (EET, UTC+2)</option>
+                  <option value="UTC">UTC</option>
+                </select>
+                <p className="text-[11px] text-muted-foreground">Used when displaying scheduled campaign times</p>
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <Button
+                size="sm"
+                className="gap-2 h-8 text-xs"
+                onClick={() => save.mutate()}
+                disabled={save.isPending || !isDirty}
+                data-testid="button-save-org-profile"
+              >
+                <Save className="w-3.5 h-3.5" />
+                {save.isPending ? "Saving…" : "Save Profile"}
+              </Button>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Settings() {
   const { data: status, isLoading, refetch, isFetching } = useProviderStatus();
 
@@ -251,7 +379,9 @@ export default function Settings() {
         </Button>
       </div>
 
-      <div className="grid gap-5">
+      <OrgProfileCard />
+
+      <div className="grid gap-5 mt-5">
         <IntegrationCard
           title="Africa's Talking — SMS"
           description="Bulk SMS delivery across Kenya, Uganda, Tanzania, Ghana and more via USSD/GSM."

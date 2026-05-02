@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, campaignsTable, campaignMessagesTable, contactsTable, contactGroupsTable } from "@workspace/db";
+import { db, campaignsTable, campaignMessagesTable, contactsTable, contactGroupsTable, orgSettingsTable } from "@workspace/db";
 import { eq, inArray, sql, and, ilike, or } from "drizzle-orm";
 import { sendMessage, isSimulated } from "../services/messaging";
 import {
@@ -218,6 +218,10 @@ router.post("/campaigns/:id/send", async (req, res) => {
   // Mark campaign as sending
   await db.update(campaignsTable).set({ status: "sending" }).where(eq(campaignsTable.id, id));
 
+  // Fetch org name for variable substitution
+  const orgNameRow = await db.select().from(orgSettingsTable).where(eq(orgSettingsTable.key, "org_name"));
+  const orgName = orgNameRow[0]?.value ?? "";
+
   // Variable substitution helper
   const substituteVars = (template: string, contact: typeof contacts[number]) => {
     const today = new Date();
@@ -229,6 +233,7 @@ router.post("/campaigns/:id/send", async (req, res) => {
       due: fmt(due),
       amount: contact.customFields?.["amount"] ?? "",
       balance: contact.customFields?.["balance"] ?? "",
+      org_name: orgName,
     };
     const vars = { ...defaults, ...(contact.customFields ?? {}) };
     return template.replace(/{{(\w+)}}/g, (_, key: string) => vars[key] ?? `{{${key}}}`);

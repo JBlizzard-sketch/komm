@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, inboxMessagesTable } from "@workspace/db";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, or, ilike } from "drizzle-orm";
 import { sendMessage } from "../services/messaging";
 import {
   MarkInboxReadParams,
@@ -12,9 +12,18 @@ const router = Router();
 router.get("/inbox", async (req, res) => {
   const query = ListInboxMessagesQueryParams.parse(req.query);
   const { read, page, limit } = query;
+  const search = typeof req.query["search"] === "string" ? req.query["search"].trim() : undefined;
 
-  let conditions: ReturnType<typeof eq>[] = [];
+  const conditions: ReturnType<typeof eq>[] = [];
   if (read !== undefined) conditions.push(eq(inboxMessagesTable.read, read));
+  if (search) {
+    conditions.push(
+      or(
+        ilike(inboxMessagesTable.from, `%${search}%`),
+        ilike(inboxMessagesTable.contactName, `%${search}%`),
+      ) as ReturnType<typeof eq>
+    );
+  }
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
   const [messages, countResult, unreadResult] = await Promise.all([
@@ -82,7 +91,6 @@ router.post("/inbox/:id/reply", async (req, res) => {
 
   const result = await sendMessage(channel, phone, null, body);
 
-  // Mark as read
   await db.update(inboxMessagesTable).set({ read: true }).where(eq(inboxMessagesTable.id, id));
 
   return res.json({
