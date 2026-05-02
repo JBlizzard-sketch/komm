@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, campaignsTable, campaignMessagesTable, contactsTable, contactGroupsTable } from "@workspace/db";
-import { eq, inArray, sql, and } from "drizzle-orm";
+import { eq, inArray, sql, and, ilike, or } from "drizzle-orm";
 import { sendMessage, isSimulated } from "../services/messaging";
 import {
   CreateCampaignBody,
@@ -22,10 +22,19 @@ const router = Router();
 router.get("/campaigns", async (req, res) => {
   const query = ListCampaignsQueryParams.parse(req.query);
   const { status, channel, page, limit } = query;
+  const search = typeof req.query["search"] === "string" ? req.query["search"].trim() : undefined;
 
   let conditions: ReturnType<typeof eq>[] = [];
   if (status) conditions.push(eq(campaignsTable.status, status));
   if (channel) conditions.push(eq(campaignsTable.channel, channel));
+  if (search) {
+    conditions.push(
+      or(
+        ilike(campaignsTable.name, `%${search}%`),
+        ilike(campaignsTable.body, `%${search}%`)
+      ) as ReturnType<typeof eq>
+    );
+  }
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
   const [campaigns, countResult] = await Promise.all([

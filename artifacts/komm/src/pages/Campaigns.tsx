@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
 import {
   Plus, Send, Clock, CheckCircle2, XCircle, FileText,
@@ -160,11 +160,23 @@ export default function Campaigns() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [channelFilter, setChannelFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
+
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 300);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [search]);
 
   const queryParams = {
     status: statusFilter !== "all" ? (statusFilter as "draft" | "scheduled" | "sending" | "sent" | "failed") : undefined,
     channel: channelFilter !== "all" ? (channelFilter as "sms" | "whatsapp" | "email") : undefined,
+    search: debouncedSearch || undefined,
     page,
     limit: PAGE_SIZE,
   };
@@ -173,12 +185,7 @@ export default function Campaigns() {
     query: { queryKey: getListCampaignsQueryKey(queryParams) },
   });
 
-  const allRows = data?.data ?? [];
-  const filtered = useMemo(() => {
-    if (!search.trim()) return allRows;
-    const q = search.toLowerCase();
-    return allRows.filter((c) => c.name.toLowerCase().includes(q) || c.body.toLowerCase().includes(q));
-  }, [allRows, search]);
+  const filtered = data?.data ?? [];
 
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
