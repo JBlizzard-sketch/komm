@@ -29,7 +29,7 @@ async function processDueCampaigns() {
       await db.update(campaignsTable).set({ status: "sending" }).where(eq(campaignsTable.id, campaign.id));
 
       // Gather contacts
-      let contacts: { id: number; name: string; phone: string; email: string | null; channel: string }[] = [];
+      let contacts: { id: number; name: string; phone: string; email: string | null; channel: string; customFields: Record<string, string> | null }[] = [];
       if (campaign.groupIds.length > 0) {
         const memberships = await db
           .select({ contactId: contactGroupsTable.contactId })
@@ -44,11 +44,28 @@ async function processDueCampaigns() {
               phone: contactsTable.phone,
               email: contactsTable.email,
               channel: contactsTable.channel,
+              customFields: contactsTable.customFields,
             })
             .from(contactsTable)
             .where(and(inArray(contactsTable.id, contactIds), eq(contactsTable.optedOut, false)));
         }
       }
+
+      // Variable substitution helper (mirrors campaigns route)
+      const substituteVars = (template: string, contact: typeof contacts[number]) => {
+        const today = new Date();
+        const due = new Date(today); due.setDate(due.getDate() + 7);
+        const fmt = (d: Date) => d.toLocaleDateString("en-KE", { day: "numeric", month: "long", year: "numeric" });
+        const defaults: Record<string, string> = {
+          name: contact.name,
+          date: fmt(today),
+          due: fmt(due),
+          amount: contact.customFields?.["amount"] ?? "",
+          balance: contact.customFields?.["balance"] ?? "",
+        };
+        const vars = { ...defaults, ...(contact.customFields ?? {}) };
+        return template.replace(/{{(\w+)}}/g, (_, key: string) => vars[key] ?? `{{${key}}}`);
+      };
 
       // Send to each contact
       let deliveredCount = 0;
@@ -59,11 +76,12 @@ async function processDueCampaigns() {
           ? campaign.channel
           : contact.channel;
 
-        // Replace template variables (basic)
-        const body = campaign.body.replace(/{{name}}/g, contact.name);
-
+        const body = substituteVars(campaign.body, contact);
         const result = await sendMessage(effectiveChannel, contact.phone, contact.email, body);
-        const status = result.success ? "delivered" : "failed";
+
+        const initialStatus = result.simulated
+          ? (result.success ? "delivered" : "failed")
+          : (result.success ? "sent" : "failed");
         if (result.success) deliveredCount++;
 
         messageRows.push({
@@ -71,8 +89,9 @@ async function processDueCampaigns() {
           contactId: contact.id,
           contactName: contact.name,
           phone: contact.phone,
-          status,
-          deliveredAt: result.success ? new Date() : null,
+          status: initialStatus,
+          providerMessageId: result.messageId ?? null,
+          deliveredAt: initialStatus === "delivered" ? new Date() : null,
           errorMessage: result.error ?? null,
         });
       }

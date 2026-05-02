@@ -6,6 +6,15 @@ import { db, campaignMessagesTable, inboxMessagesTable, contactsTable } from "@w
 import { eq, and } from "drizzle-orm";
 import { logger } from "../lib/logger";
 
+async function lookupContact(phone: string) {
+  const [contact] = await db
+    .select({ id: contactsTable.id, name: contactsTable.name })
+    .from(contactsTable)
+    .where(eq(contactsTable.phone, phone))
+    .limit(1);
+  return contact ?? null;
+}
+
 const router = Router();
 
 // ── Africa's Talking Delivery Reports ────────────────────────────────────────
@@ -62,7 +71,6 @@ router.post("/webhooks/at/inbox", async (req, res) => {
 
   try {
     if (isStop) {
-      // Honour opt-out: mark contact as opted out by phone number
       await db
         .update(contactsTable)
         .set({ optedOut: true })
@@ -70,11 +78,14 @@ router.post("/webhooks/at/inbox", async (req, res) => {
       req.log.info({ from }, "Contact opted out via STOP SMS");
     }
 
+    const contact = await lookupContact(from);
     await db.insert(inboxMessagesTable).values({
       from,
+      contactName: contact?.name ?? null,
+      contactId: contact?.id ?? null,
       body: text,
       channel: "sms",
-      read: isStop, // auto-read STOP messages
+      read: isStop,
       receivedAt: date ? new Date(date) : new Date(),
     });
     return res.json({ success: true });
@@ -154,8 +165,11 @@ router.post("/webhooks/whatsapp", async (req, res) => {
           logger.info({ from: msg.from }, "Contact opted out via STOP WhatsApp");
         }
 
+        const contact = await lookupContact(msg.from);
         await db.insert(inboxMessagesTable).values({
           from: msg.from,
+          contactName: contact?.name ?? null,
+          contactId: contact?.id ?? null,
           body: msg.text.body,
           channel: "whatsapp",
           read: isStop,

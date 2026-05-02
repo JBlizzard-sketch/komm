@@ -256,13 +256,13 @@ export default function CampaignDetail() {
         </Card>
         <Card>
           <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-green-600">{(campaign as { deliveredCount?: number }).deliveredCount ?? 0}</p>
+            <p className="text-2xl font-bold text-green-600">{campaign.deliveredCount ?? 0}</p>
             <p className="text-xs text-muted-foreground mt-1">Delivered</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-red-600">{(campaign as { failedCount?: number }).failedCount ?? 0}</p>
+            <p className="text-2xl font-bold text-red-600">{campaign.failedCount ?? 0}</p>
             <p className="text-xs text-muted-foreground mt-1">Failed</p>
           </CardContent>
         </Card>

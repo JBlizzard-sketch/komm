@@ -7,6 +7,7 @@ export const inboxMessagesTable = pgTable("inbox_messages", {
   id: serial("id").primaryKey(),
   from: text("from").notNull(),
   contactName: text("contact_name"),
+  contactId: integer("contact_id"),
   body: text("body").notNull(),
   channel: text("channel").notNull().default("sms"),
   read: boolean("read").notNull().default(false),
