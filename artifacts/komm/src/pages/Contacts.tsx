@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import {
   Plus, Upload, Search, Trash2, Users, FileSpreadsheet,
   CheckCircle2, AlertCircle, X, Download, UserPlus, CheckSquare, Square, Edit2,
+  ChevronLeft, ChevronRight, History, ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Sheet, SheetContent, SheetHeader, SheetTitle,
+} from "@/components/ui/sheet";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -24,9 +28,10 @@ import {
   useListGroups,
   getListContactsQueryKey, getListGroupsQueryKey, getGetDashboardStatsQueryKey,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { useLocation } from "wouter";
 import type { Contact } from "@workspace/api-client-react";
 
 const contactSchema = z.object({
@@ -44,7 +49,31 @@ const CHANNEL_CONFIG: Record<string, string> = {
   email: "bg-amber-100 text-amber-800",
 };
 
+const STATUS_CONFIG: Record<string, { label: string; class: string }> = {
+  delivered: { label: "Delivered", class: "bg-green-100 text-green-800 border-green-200" },
+  sent:      { label: "Sent",      class: "bg-blue-100 text-blue-800 border-blue-200" },
+  pending:   { label: "Pending",   class: "bg-amber-100 text-amber-800 border-amber-200" },
+  failed:    { label: "Failed",    class: "bg-red-100 text-red-800 border-red-200" },
+};
+
+const PAGE_SIZE = 50;
+
+// ── Types ──────────────────────────────────────────────────────────────────
+
 interface ParsedContact { name: string; phone: string; email?: string; channel: string }
+
+interface ContactMessage {
+  id: number;
+  campaignId: number;
+  campaignName: string;
+  channel: string;
+  status: string;
+  errorMessage?: string | null;
+  deliveredAt?: string | null;
+  createdAt: string;
+}
+
+// ── CSV helpers ────────────────────────────────────────────────────────────
 
 function parseCSV(text: string): ParsedContact[] {
   const lines = text.trim().split(/\r?\n/);
@@ -76,6 +105,116 @@ function exportContactsCSV(contacts: { name: string; phone: string; email: strin
   a.click();
   URL.revokeObjectURL(url);
 }
+
+// ── Contact History Sheet ──────────────────────────────────────────────────
+
+function ContactHistorySheet({ contact, open, onClose }: { contact: Contact | null; open: boolean; onClose: () => void }) {
+  const [, navigate] = useLocation();
+
+  const { data, isLoading } = useQuery<{ data: ContactMessage[]; total: number }>({
+    queryKey: ["contact-messages", contact?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/contacts/${contact!.id}/messages?limit=20`);
+      if (!res.ok) throw new Error("Failed to load");
+      return res.json();
+    },
+    enabled: open && !!contact,
+    staleTime: 30_000,
+  });
+
+  if (!contact) return null;
+
+  return (
+    <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
+      <SheetContent className="w-full sm:max-w-md flex flex-col">
+        <SheetHeader className="pb-4 border-b border-border">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0 font-semibold text-primary text-sm">
+              {contact.name.charAt(0).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <SheetTitle className="text-base font-semibold">{contact.name}</SheetTitle>
+              <p className="text-sm text-muted-foreground">{contact.phone}</p>
+              {contact.email && <p className="text-xs text-muted-foreground truncate">{contact.email}</p>}
+            </div>
+            <Badge variant="outline" className={`text-[11px] capitalize shrink-0 ${CHANNEL_CONFIG[contact.channel] ?? ""}`}>
+              {contact.channel}
+            </Badge>
+          </div>
+        </SheetHeader>
+
+        <div className="flex-1 overflow-y-auto pt-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-medium flex items-center gap-2">
+              <History className="w-3.5 h-3.5 text-muted-foreground" />
+              Message History
+            </p>
+            {data && <span className="text-xs text-muted-foreground">{data.total} total</span>}
+          </div>
+
+          {isLoading ? (
+            <div className="space-y-3">
+              {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-16 rounded-lg" />)}
+            </div>
+          ) : !data?.data || data.data.length === 0 ? (
+            <div className="text-center py-12">
+              <History className="w-8 h-8 text-muted-foreground mx-auto mb-3 opacity-40" />
+              <p className="text-sm font-medium">No messages yet</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                This contact hasn't been included in any campaigns.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {data.data.map((msg) => {
+                const sc = STATUS_CONFIG[msg.status] ?? STATUS_CONFIG.pending;
+                return (
+                  <div key={msg.id} className="rounded-lg border border-border p-3 hover:bg-muted/30 transition-colors">
+                    <div className="flex items-start justify-between gap-2">
+                      <button
+                        className="text-sm font-medium text-foreground hover:text-primary hover:underline flex items-center gap-1 text-left"
+                        onClick={() => { onClose(); navigate(`/campaigns/${msg.campaignId}`); }}
+                      >
+                        {msg.campaignName}
+                        <ExternalLink className="w-3 h-3 shrink-0" />
+                      </button>
+                      <Badge variant="outline" className={`shrink-0 text-[10px] ${sc.class}`}>
+                        {sc.label}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <Badge variant="outline" className={`text-[10px] capitalize ${CHANNEL_CONFIG[msg.channel] ?? ""}`}>
+                        {msg.channel}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {format(new Date(msg.createdAt), "d MMM yyyy, HH:mm")}
+                      </span>
+                    </div>
+                    {msg.errorMessage && (
+                      <p className="text-xs text-red-600 mt-1.5 bg-red-50 rounded px-2 py-1">{msg.errorMessage}</p>
+                    )}
+                    {msg.deliveredAt && (
+                      <p className="text-xs text-green-700 mt-1">
+                        Delivered {format(new Date(msg.deliveredAt), "d MMM, HH:mm")}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+              {data.total > 20 && (
+                <p className="text-center text-xs text-muted-foreground pt-2">
+                  Showing latest 20 of {data.total} messages
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+// ── CSV Import Dialog ──────────────────────────────────────────────────────
 
 function CSVImportDialog({ open, onClose, groups }: { open: boolean; onClose: () => void; groups: { id: number; name: string; contactCount: number }[] }) {
   const qc = useQueryClient();
@@ -150,6 +289,8 @@ function CSVImportDialog({ open, onClose, groups }: { open: boolean; onClose: ()
   );
 }
 
+// ── Contact Form Dialog ────────────────────────────────────────────────────
+
 function ContactFormDialog({
   open, onClose, editContact, groups,
 }: {
@@ -169,31 +310,17 @@ function ContactFormDialog({
     defaultValues: { name: "", phone: "", email: "", channel: "sms", groupIds: [] },
   });
 
-  // Pre-fill when editing
   useState(() => {
     if (editContact) {
-      form.reset({
-        name: editContact.name,
-        phone: editContact.phone,
-        email: editContact.email ?? "",
-        channel: editContact.channel as "sms" | "whatsapp" | "email",
-        groupIds: editContact.groupIds ?? [],
-      });
+      form.reset({ name: editContact.name, phone: editContact.phone, email: editContact.email ?? "", channel: editContact.channel as "sms" | "whatsapp" | "email", groupIds: editContact.groupIds ?? [] });
     } else {
       form.reset({ name: "", phone: "", email: "", channel: "sms", groupIds: [] });
     }
   });
 
-  // Reset form when dialog opens
   const handleOpenChange = (open: boolean) => {
     if (open && editContact) {
-      form.reset({
-        name: editContact.name,
-        phone: editContact.phone,
-        email: editContact.email ?? "",
-        channel: editContact.channel as "sms" | "whatsapp" | "email",
-        groupIds: editContact.groupIds ?? [],
-      });
+      form.reset({ name: editContact.name, phone: editContact.phone, email: editContact.email ?? "", channel: editContact.channel as "sms" | "whatsapp" | "email", groupIds: editContact.groupIds ?? [] });
     } else if (!open) {
       onClose();
     }
@@ -210,12 +337,7 @@ function ContactFormDialog({
       updateContact.mutate(
         { id: editContact.id, data: { name: values.name, phone: values.phone, email: values.email || null, channel: values.channel, groupIds: values.groupIds } },
         {
-          onSuccess: () => {
-            qc.invalidateQueries({ queryKey: getListContactsQueryKey() });
-            qc.invalidateQueries({ queryKey: getListGroupsQueryKey() });
-            toast({ title: "Contact updated" });
-            onClose();
-          },
+          onSuccess: () => { qc.invalidateQueries({ queryKey: getListContactsQueryKey() }); qc.invalidateQueries({ queryKey: getListGroupsQueryKey() }); toast({ title: "Contact updated" }); onClose(); },
           onError: () => toast({ title: "Failed to update contact", variant: "destructive" }),
         }
       );
@@ -223,14 +345,7 @@ function ContactFormDialog({
       createContact.mutate(
         { data: { name: values.name, phone: values.phone, email: values.email || null, channel: values.channel, groupIds: values.groupIds } },
         {
-          onSuccess: () => {
-            qc.invalidateQueries({ queryKey: getListContactsQueryKey() });
-            qc.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() });
-            qc.invalidateQueries({ queryKey: getListGroupsQueryKey() });
-            toast({ title: "Contact added" });
-            onClose();
-            form.reset();
-          },
+          onSuccess: () => { qc.invalidateQueries({ queryKey: getListContactsQueryKey() }); qc.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() }); qc.invalidateQueries({ queryKey: getListGroupsQueryKey() }); toast({ title: "Contact added" }); onClose(); form.reset(); },
           onError: () => toast({ title: "Failed to add contact", variant: "destructive" }),
         }
       );
@@ -273,8 +388,7 @@ function ContactFormDialog({
                 <div className="flex flex-wrap gap-1.5">
                   {groups.map((g) => (
                     <button key={g.id} type="button" onClick={() => toggleGroup(g.id)}
-                      className={`px-2.5 py-1 rounded-full border text-xs transition-colors ${selectedGroupIds.includes(g.id) ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-muted-foreground/40"}`}
-                    >
+                      className={`px-2.5 py-1 rounded-full border text-xs transition-colors ${selectedGroupIds.includes(g.id) ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-muted-foreground/40"}`}>
                       {g.name}
                     </button>
                   ))}
@@ -294,26 +408,38 @@ function ContactFormDialog({
   );
 }
 
+// ── Main Page ──────────────────────────────────────────────────────────────
+
 export default function Contacts() {
   const [search, setSearch] = useState("");
   const [groupFilter, setGroupFilter] = useState("all");
+  const [page, setPage] = useState(1);
+
   const [showContactForm, setShowContactForm] = useState(false);
   const [editContact, setEditContact] = useState<Contact | null>(null);
   const [showImport, setShowImport] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [showBulkGroup, setShowBulkGroup] = useState(false);
   const [bulkGroupId, setBulkGroupId] = useState("none");
+  const [historyContact, setHistoryContact] = useState<Contact | null>(null);
+
   const qc = useQueryClient();
   const { toast } = useToast();
 
   const { data: groups } = useListGroups({ query: { queryKey: getListGroupsQueryKey() } });
 
-  const { data, isLoading } = useListContacts(
-    { search: search || undefined, groupId: groupFilter !== "all" ? parseInt(groupFilter) : undefined, page: 1, limit: 200 },
-    { query: { queryKey: getListContactsQueryKey({ search: search || undefined, groupId: groupFilter !== "all" ? parseInt(groupFilter) : undefined, page: 1, limit: 200 }) } }
-  );
+  const queryParams = {
+    search: search || undefined,
+    groupId: groupFilter !== "all" ? parseInt(groupFilter) : undefined,
+    page,
+    limit: PAGE_SIZE,
+  };
+  const { data, isLoading } = useListContacts(queryParams, { query: { queryKey: getListContactsQueryKey(queryParams) } });
 
   const contacts = data?.data ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
   const deleteContact = useDeleteContact();
   const bulkDelete = useBulkDeleteContacts();
   const bulkGroup = useBulkAddContactsToGroup();
@@ -321,6 +447,11 @@ export default function Contacts() {
   const openAdd = () => { setEditContact(null); setShowContactForm(true); };
   const openEdit = (c: Contact) => { setEditContact(c); setShowContactForm(true); };
   const closeForm = () => { setShowContactForm(false); setEditContact(null); };
+
+  const resetPage = () => setPage(1);
+
+  const handleSearchChange = (v: string) => { setSearch(v); resetPage(); };
+  const handleGroupFilterChange = (v: string) => { setGroupFilter(v); resetPage(); };
 
   const toggleSelect = (id: number) => {
     setSelected((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
@@ -382,7 +513,7 @@ export default function Contacts() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-semibold">Contacts</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{data?.total ?? 0} contacts</p>
+          <p className="text-sm text-muted-foreground mt-0.5">{total} contacts</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" className="gap-2" onClick={() => exportContactsCSV(contacts)} disabled={contacts.length === 0} data-testid="button-export">
@@ -400,9 +531,9 @@ export default function Contacts() {
       <div className="flex gap-3 mb-4">
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-          <Input placeholder="Search name or phone..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-8 text-sm" />
+          <Input placeholder="Search name or phone..." value={search} onChange={(e) => handleSearchChange(e.target.value)} className="pl-9 h-8 text-sm" />
         </div>
-        <Select value={groupFilter} onValueChange={setGroupFilter}>
+        <Select value={groupFilter} onValueChange={handleGroupFilterChange}>
           <SelectTrigger className="w-40 h-8 text-sm"><SelectValue placeholder="All groups" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All groups</SelectItem>
@@ -437,7 +568,7 @@ export default function Contacts() {
           <span className="w-24 text-xs font-medium text-muted-foreground uppercase tracking-wide">Channel</span>
           <span className="flex-1 text-xs font-medium text-muted-foreground uppercase tracking-wide">Groups</span>
           <span className="w-28 text-xs font-medium text-muted-foreground uppercase tracking-wide text-right">Added</span>
-          <span className="w-14" />
+          <span className="w-20" />
         </div>
 
         <CardContent className="p-0">
@@ -461,7 +592,13 @@ export default function Contacts() {
                     {selected.has(contact.id) ? <CheckSquare className="w-4 h-4 text-primary" /> : <Square className="w-4 h-4" />}
                   </button>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{contact.name}</p>
+                    <button
+                      className="text-sm font-medium text-left hover:text-primary hover:underline transition-colors"
+                      onClick={() => setHistoryContact(contact)}
+                      data-testid={`contact-name-${contact.id}`}
+                    >
+                      {contact.name}
+                    </button>
                     {contact.email && <p className="text-xs text-muted-foreground truncate">{contact.email}</p>}
                   </div>
                   <span className="text-sm text-muted-foreground w-32 shrink-0">{contact.phone}</span>
@@ -473,7 +610,11 @@ export default function Contacts() {
                     {(contact.groupIds ?? []).length > 3 && <Badge variant="outline" className="text-[10px]">+{(contact.groupIds ?? []).length - 3}</Badge>}
                   </div>
                   <span className="text-xs text-muted-foreground w-28 text-right shrink-0">{format(new Date(contact.createdAt), "MMM d, yyyy")}</span>
-                  <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-all shrink-0 w-14 justify-end">
+                  <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-all shrink-0 w-20 justify-end">
+                    <button onClick={() => setHistoryContact(contact)} title="View message history"
+                      className="w-7 h-7 flex items-center justify-center rounded text-muted-foreground hover:text-primary hover:bg-primary/10" data-testid={`history-contact-${contact.id}`}>
+                      <History className="w-3.5 h-3.5" />
+                    </button>
                     <button onClick={() => openEdit(contact)} className="w-7 h-7 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted" data-testid={`edit-contact-${contact.id}`}>
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
@@ -486,6 +627,51 @@ export default function Contacts() {
             </div>
           )}
         </CardContent>
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-5 py-3 border-t border-border">
+            <span className="text-xs text-muted-foreground">
+              Page {page} of {totalPages} · {total} contacts
+            </span>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                data-testid="page-prev"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                const pg = totalPages <= 5 ? i + 1 : page <= 3 ? i + 1 : page >= totalPages - 2 ? totalPages - 4 + i : page - 2 + i;
+                return (
+                  <Button
+                    key={pg}
+                    variant={pg === page ? "default" : "outline"}
+                    size="sm"
+                    className="h-7 w-7 p-0 text-xs"
+                    onClick={() => setPage(pg)}
+                    data-testid={`page-${pg}`}
+                  >
+                    {pg}
+                  </Button>
+                );
+              })}
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                data-testid="page-next"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
 
       <Dialog open={showBulkGroup} onOpenChange={setShowBulkGroup}>
@@ -517,6 +703,12 @@ export default function Contacts() {
         onClose={closeForm}
         editContact={editContact}
         groups={groups ?? []}
+      />
+
+      <ContactHistorySheet
+        contact={historyContact}
+        open={!!historyContact}
+        onClose={() => setHistoryContact(null)}
       />
     </div>
   );

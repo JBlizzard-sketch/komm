@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, contactsTable, groupsTable, contactGroupsTable } from "@workspace/db";
+import { db, contactsTable, groupsTable, contactGroupsTable, campaignMessagesTable, campaignsTable } from "@workspace/db";
 import { eq, ilike, inArray, sql, and } from "drizzle-orm";
 import {
   CreateContactBody,
@@ -173,6 +173,40 @@ router.get("/contacts/:id", async (req, res) => {
     .where(eq(contactGroupsTable.contactId, id));
 
   return res.json({ ...contact, groupIds: memberships.map((m) => m.groupId) });
+});
+
+router.get("/contacts/:id/messages", async (req, res) => {
+  const { id } = GetContactParams.parse(req.params);
+  const page = Math.max(1, parseInt((req.query.page as string) ?? "1"));
+  const limit = Math.min(50, Math.max(1, parseInt((req.query.limit as string) ?? "20")));
+
+  const whereClause = eq(campaignMessagesTable.contactId, id);
+
+  const [rows, countResult] = await Promise.all([
+    db
+      .select({
+        id: campaignMessagesTable.id,
+        campaignId: campaignMessagesTable.campaignId,
+        campaignName: campaignsTable.name,
+        channel: campaignsTable.channel,
+        status: campaignMessagesTable.status,
+        errorMessage: campaignMessagesTable.errorMessage,
+        deliveredAt: campaignMessagesTable.deliveredAt,
+        createdAt: campaignMessagesTable.createdAt,
+      })
+      .from(campaignMessagesTable)
+      .innerJoin(campaignsTable, eq(campaignMessagesTable.campaignId, campaignsTable.id))
+      .where(whereClause)
+      .orderBy(sql`${campaignMessagesTable.createdAt} DESC`)
+      .limit(limit)
+      .offset((page - 1) * limit),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(campaignMessagesTable)
+      .where(whereClause),
+  ]);
+
+  return res.json({ data: rows, total: countResult[0]?.count ?? 0, page, limit });
 });
 
 router.put("/contacts/:id", async (req, res) => {
