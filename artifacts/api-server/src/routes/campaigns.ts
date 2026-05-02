@@ -10,6 +10,9 @@ import {
   DeleteCampaignParams,
   ListCampaignsQueryParams,
   SendCampaignParams,
+  TestCampaignParams,
+  TestCampaignBody,
+  DuplicateCampaignParams,
   ListCampaignMessagesParams,
   ListCampaignMessagesQueryParams,
 } from "@workspace/api-zod";
@@ -208,6 +211,42 @@ router.post("/campaigns/:id/send", async (req, res) => {
     ...updated,
     simulated: isSimulated[campaign.channel as "sms" | "whatsapp" | "email"] ?? true,
   });
+});
+
+router.post("/campaigns/:id/test", async (req, res) => {
+  const { id } = TestCampaignParams.parse(req.params);
+  const body = TestCampaignBody.parse(req.body);
+  const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, id));
+  if (!campaign) return res.status(404).json({ error: "Not found" });
+
+  const result = await sendMessage(campaign.channel, body.phone, body.email ?? null, campaign.body);
+  return res.json({
+    success: result.success,
+    simulated: result.simulated ?? false,
+    messageId: result.messageId ?? null,
+    error: result.error ?? null,
+  });
+});
+
+router.post("/campaigns/:id/duplicate", async (req, res) => {
+  const { id } = DuplicateCampaignParams.parse(req.params);
+  const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, id));
+  if (!campaign) return res.status(404).json({ error: "Not found" });
+
+  const [newCampaign] = await db
+    .insert(campaignsTable)
+    .values({
+      name: `${campaign.name} (copy)`,
+      channel: campaign.channel,
+      body: campaign.body,
+      templateId: campaign.templateId,
+      groupIds: campaign.groupIds,
+      recipientCount: campaign.recipientCount,
+      status: "draft",
+    })
+    .returning();
+
+  return res.status(201).json(newCampaign);
 });
 
 router.get("/campaigns/:id/messages", async (req, res) => {

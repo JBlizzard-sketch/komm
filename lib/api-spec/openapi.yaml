@@ -166,6 +166,52 @@ paths:
               schema:
                 $ref: "#/components/schemas/ImportResult"
 
+  /contacts/bulk-delete:
+    post:
+      operationId: bulkDeleteContacts
+      tags: [contacts]
+      summary: Delete multiple contacts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContactIdsBody"
+      responses:
+        "200":
+          description: Deletion result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [deleted]
+                properties:
+                  deleted:
+                    type: integer
+
+  /contacts/bulk-group:
+    post:
+      operationId: bulkAddContactsToGroup
+      tags: [contacts]
+      summary: Add multiple contacts to a group
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkGroupBody"
+      responses:
+        "200":
+          description: Result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [added]
+                properties:
+                  added:
+                    type: integer
+
   # ── Groups ─────────────────────────────────────────────────────────────────
   /groups:
     get:
@@ -236,6 +282,61 @@ paths:
       responses:
         "204":
           description: Deleted
+
+  /groups/{id}/members:
+    get:
+      operationId: listGroupMembers
+      tags: [groups]
+      summary: List contacts belonging to a group
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+      responses:
+        "200":
+          description: Group members
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContactsPage"
+    delete:
+      operationId: removeContactFromGroup
+      tags: [groups]
+      summary: Remove a contact from a group
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: contactId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Removal result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [removed]
+                properties:
+                  removed:
+                    type: boolean
 
   /groups/{id}/contacts:
     post:
@@ -482,6 +583,50 @@ paths:
       responses:
         "200":
           description: Campaign queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+
+  /campaigns/{id}/test:
+    post:
+      operationId: testCampaign
+      tags: [campaigns]
+      summary: Send a single test message to a specific number/email
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TestMessageBody"
+      responses:
+        "200":
+          description: Test result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestMessageResult"
+
+  /campaigns/{id}/duplicate:
+    post:
+      operationId: duplicateCampaign
+      tags: [campaigns]
+      summary: Duplicate a campaign as a new draft
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "201":
+          description: New campaign
           content:
             application/json:
               schema:
@@ -747,6 +892,42 @@ components:
           type: array
           items:
             type: integer
+
+    BulkGroupBody:
+      type: object
+      required: [contactIds, groupId]
+      properties:
+        contactIds:
+          type: array
+          items:
+            type: integer
+        groupId:
+          type: integer
+
+    TestMessageBody:
+      type: object
+      required: [phone]
+      properties:
+        phone:
+          type: string
+        email:
+          type: string
+          nullable: true
+
+    TestMessageResult:
+      type: object
+      required: [success, simulated]
+      properties:
+        success:
+          type: boolean
+        simulated:
+          type: boolean
+        messageId:
+          type: string
+          nullable: true
+        error:
+          type: string
+          nullable: true
 
     # ── Groups ──────────────────────────────────────────────────────────────
     Group:

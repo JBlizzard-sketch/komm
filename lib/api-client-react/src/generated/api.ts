@@ -18,6 +18,9 @@ import type {
 
 import type {
   ActivityItem,
+  BulkAddContactsToGroup200,
+  BulkDeleteContacts200,
+  BulkGroupBody,
   Campaign,
   CampaignDetail,
   CampaignMessagesPage,
@@ -42,9 +45,14 @@ import type {
   ListCampaignMessagesParams,
   ListCampaignsParams,
   ListContactsParams,
+  ListGroupMembersParams,
   ListInboxMessagesParams,
   ListTemplatesParams,
+  RemoveContactFromGroup200,
+  RemoveContactFromGroupParams,
   Template,
+  TestMessageBody,
+  TestMessageResult,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -656,6 +664,181 @@ export const useImportContacts = <
 };
 
 /**
+ * @summary Delete multiple contacts
+ */
+export const getBulkDeleteContactsUrl = () => {
+  return `/api/contacts/bulk-delete`;
+};
+
+export const bulkDeleteContacts = async (
+  contactIdsBody: ContactIdsBody,
+  options?: RequestInit,
+): Promise<BulkDeleteContacts200> => {
+  return customFetch<BulkDeleteContacts200>(getBulkDeleteContactsUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(contactIdsBody),
+  });
+};
+
+export const getBulkDeleteContactsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof bulkDeleteContacts>>,
+    TError,
+    { data: BodyType<ContactIdsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof bulkDeleteContacts>>,
+  TError,
+  { data: BodyType<ContactIdsBody> },
+  TContext
+> => {
+  const mutationKey = ["bulkDeleteContacts"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof bulkDeleteContacts>>,
+    { data: BodyType<ContactIdsBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return bulkDeleteContacts(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type BulkDeleteContactsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof bulkDeleteContacts>>
+>;
+export type BulkDeleteContactsMutationBody = BodyType<ContactIdsBody>;
+export type BulkDeleteContactsMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete multiple contacts
+ */
+export const useBulkDeleteContacts = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof bulkDeleteContacts>>,
+    TError,
+    { data: BodyType<ContactIdsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof bulkDeleteContacts>>,
+  TError,
+  { data: BodyType<ContactIdsBody> },
+  TContext
+> => {
+  return useMutation(getBulkDeleteContactsMutationOptions(options));
+};
+
+/**
+ * @summary Add multiple contacts to a group
+ */
+export const getBulkAddContactsToGroupUrl = () => {
+  return `/api/contacts/bulk-group`;
+};
+
+export const bulkAddContactsToGroup = async (
+  bulkGroupBody: BulkGroupBody,
+  options?: RequestInit,
+): Promise<BulkAddContactsToGroup200> => {
+  return customFetch<BulkAddContactsToGroup200>(
+    getBulkAddContactsToGroupUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(bulkGroupBody),
+    },
+  );
+};
+
+export const getBulkAddContactsToGroupMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof bulkAddContactsToGroup>>,
+    TError,
+    { data: BodyType<BulkGroupBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof bulkAddContactsToGroup>>,
+  TError,
+  { data: BodyType<BulkGroupBody> },
+  TContext
+> => {
+  const mutationKey = ["bulkAddContactsToGroup"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof bulkAddContactsToGroup>>,
+    { data: BodyType<BulkGroupBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return bulkAddContactsToGroup(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type BulkAddContactsToGroupMutationResult = NonNullable<
+  Awaited<ReturnType<typeof bulkAddContactsToGroup>>
+>;
+export type BulkAddContactsToGroupMutationBody = BodyType<BulkGroupBody>;
+export type BulkAddContactsToGroupMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Add multiple contacts to a group
+ */
+export const useBulkAddContactsToGroup = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof bulkAddContactsToGroup>>,
+    TError,
+    { data: BodyType<BulkGroupBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof bulkAddContactsToGroup>>,
+  TError,
+  { data: BodyType<BulkGroupBody> },
+  TContext
+> => {
+  return useMutation(getBulkAddContactsToGroupMutationOptions(options));
+};
+
+/**
  * @summary List contact groups
  */
 export const getListGroupsUrl = () => {
@@ -983,6 +1166,219 @@ export const useDeleteGroup = <
   TContext
 > => {
   return useMutation(getDeleteGroupMutationOptions(options));
+};
+
+/**
+ * @summary List contacts belonging to a group
+ */
+export const getListGroupMembersUrl = (
+  id: number,
+  params?: ListGroupMembersParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/groups/${id}/members?${stringifiedParams}`
+    : `/api/groups/${id}/members`;
+};
+
+export const listGroupMembers = async (
+  id: number,
+  params?: ListGroupMembersParams,
+  options?: RequestInit,
+): Promise<ContactsPage> => {
+  return customFetch<ContactsPage>(getListGroupMembersUrl(id, params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListGroupMembersQueryKey = (
+  id: number,
+  params?: ListGroupMembersParams,
+) => {
+  return [`/api/groups/${id}/members`, ...(params ? [params] : [])] as const;
+};
+
+export const getListGroupMembersQueryOptions = <
+  TData = Awaited<ReturnType<typeof listGroupMembers>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  params?: ListGroupMembersParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listGroupMembers>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListGroupMembersQueryKey(id, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listGroupMembers>>
+  > = ({ signal }) =>
+    listGroupMembers(id, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listGroupMembers>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListGroupMembersQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listGroupMembers>>
+>;
+export type ListGroupMembersQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List contacts belonging to a group
+ */
+
+export function useListGroupMembers<
+  TData = Awaited<ReturnType<typeof listGroupMembers>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  params?: ListGroupMembersParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listGroupMembers>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListGroupMembersQueryOptions(id, params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Remove a contact from a group
+ */
+export const getRemoveContactFromGroupUrl = (
+  id: number,
+  params: RemoveContactFromGroupParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/groups/${id}/members?${stringifiedParams}`
+    : `/api/groups/${id}/members`;
+};
+
+export const removeContactFromGroup = async (
+  id: number,
+  params: RemoveContactFromGroupParams,
+  options?: RequestInit,
+): Promise<RemoveContactFromGroup200> => {
+  return customFetch<RemoveContactFromGroup200>(
+    getRemoveContactFromGroupUrl(id, params),
+    {
+      ...options,
+      method: "DELETE",
+    },
+  );
+};
+
+export const getRemoveContactFromGroupMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof removeContactFromGroup>>,
+    TError,
+    { id: number; params: RemoveContactFromGroupParams },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof removeContactFromGroup>>,
+  TError,
+  { id: number; params: RemoveContactFromGroupParams },
+  TContext
+> => {
+  const mutationKey = ["removeContactFromGroup"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof removeContactFromGroup>>,
+    { id: number; params: RemoveContactFromGroupParams }
+  > = (props) => {
+    const { id, params } = props ?? {};
+
+    return removeContactFromGroup(id, params, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RemoveContactFromGroupMutationResult = NonNullable<
+  Awaited<ReturnType<typeof removeContactFromGroup>>
+>;
+
+export type RemoveContactFromGroupMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Remove a contact from a group
+ */
+export const useRemoveContactFromGroup = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof removeContactFromGroup>>,
+    TError,
+    { id: number; params: RemoveContactFromGroupParams },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof removeContactFromGroup>>,
+  TError,
+  { id: number; params: RemoveContactFromGroupParams },
+  TContext
+> => {
+  return useMutation(getRemoveContactFromGroupMutationOptions(options));
 };
 
 /**
@@ -2030,6 +2426,177 @@ export const useSendCampaign = <
   TContext
 > => {
   return useMutation(getSendCampaignMutationOptions(options));
+};
+
+/**
+ * @summary Send a single test message to a specific number/email
+ */
+export const getTestCampaignUrl = (id: number) => {
+  return `/api/campaigns/${id}/test`;
+};
+
+export const testCampaign = async (
+  id: number,
+  testMessageBody: TestMessageBody,
+  options?: RequestInit,
+): Promise<TestMessageResult> => {
+  return customFetch<TestMessageResult>(getTestCampaignUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(testMessageBody),
+  });
+};
+
+export const getTestCampaignMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof testCampaign>>,
+    TError,
+    { id: number; data: BodyType<TestMessageBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof testCampaign>>,
+  TError,
+  { id: number; data: BodyType<TestMessageBody> },
+  TContext
+> => {
+  const mutationKey = ["testCampaign"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof testCampaign>>,
+    { id: number; data: BodyType<TestMessageBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return testCampaign(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type TestCampaignMutationResult = NonNullable<
+  Awaited<ReturnType<typeof testCampaign>>
+>;
+export type TestCampaignMutationBody = BodyType<TestMessageBody>;
+export type TestCampaignMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Send a single test message to a specific number/email
+ */
+export const useTestCampaign = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof testCampaign>>,
+    TError,
+    { id: number; data: BodyType<TestMessageBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof testCampaign>>,
+  TError,
+  { id: number; data: BodyType<TestMessageBody> },
+  TContext
+> => {
+  return useMutation(getTestCampaignMutationOptions(options));
+};
+
+/**
+ * @summary Duplicate a campaign as a new draft
+ */
+export const getDuplicateCampaignUrl = (id: number) => {
+  return `/api/campaigns/${id}/duplicate`;
+};
+
+export const duplicateCampaign = async (
+  id: number,
+  options?: RequestInit,
+): Promise<Campaign> => {
+  return customFetch<Campaign>(getDuplicateCampaignUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getDuplicateCampaignMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof duplicateCampaign>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof duplicateCampaign>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["duplicateCampaign"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof duplicateCampaign>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return duplicateCampaign(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DuplicateCampaignMutationResult = NonNullable<
+  Awaited<ReturnType<typeof duplicateCampaign>>
+>;
+
+export type DuplicateCampaignMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Duplicate a campaign as a new draft
+ */
+export const useDuplicateCampaign = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof duplicateCampaign>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof duplicateCampaign>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDuplicateCampaignMutationOptions(options));
 };
 
 /**

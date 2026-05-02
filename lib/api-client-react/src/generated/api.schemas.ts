@@ -74,6 +74,23 @@ export interface ContactIdsBody {
   contactIds: number[];
 }
 
+export interface BulkGroupBody {
+  contactIds: number[];
+  groupId: number;
+}
+
+export interface TestMessageBody {
+  phone: string;
+  email?: string | null;
+}
+
+export interface TestMessageResult {
+  success: boolean;
+  simulated: boolean;
+  messageId?: string | null;
+  error?: string | null;
+}
+
 export interface Group {
   id: number;
   name: string;
@@ -322,6 +339,27 @@ export const ListContactsChannel = {
   whatsapp: "whatsapp",
   email: "email",
 } as const;
+
+export type BulkDeleteContacts200 = {
+  deleted: number;
+};
+
+export type BulkAddContactsToGroup200 = {
+  added: number;
+};
+
+export type ListGroupMembersParams = {
+  page?: number;
+  limit?: number;
+};
+
+export type RemoveContactFromGroupParams = {
+  contactId: number;
+};
+
+export type RemoveContactFromGroup200 = {
+  removed: boolean;
+};
 
 export type ListTemplatesParams = {
   category?: ListTemplatesCategory;

@@ -9,12 +9,18 @@ import {
   DeleteContactParams,
   ListContactsQueryParams,
   ImportContactsBody,
+  BulkDeleteContactsBody,
+  BulkAddContactsToGroupBody,
   AddContactsToGroupParams,
   AddContactsToGroupBody,
   UpdateGroupParams,
   UpdateGroupBody,
   DeleteGroupParams,
   CreateGroupBody,
+  ListGroupMembersParams,
+  ListGroupMembersQueryParams,
+  RemoveContactFromGroupParams,
+  RemoveContactFromGroupQueryParams,
 } from "@workspace/api-zod";
 
 const router = Router();
@@ -205,6 +211,31 @@ router.delete("/contacts/:id", async (req, res) => {
   return res.status(204).send();
 });
 
+router.post("/contacts/bulk-delete", async (req, res) => {
+  const { contactIds } = BulkDeleteContactsBody.parse(req.body);
+  if (contactIds.length === 0) return res.json({ deleted: 0 });
+  await db.delete(contactGroupsTable).where(inArray(contactGroupsTable.contactId, contactIds));
+  const deleted = await db.delete(contactsTable).where(inArray(contactsTable.id, contactIds)).returning({ id: contactsTable.id });
+  return res.json({ deleted: deleted.length });
+});
+
+router.post("/contacts/bulk-group", async (req, res) => {
+  const { contactIds, groupId } = BulkAddContactsToGroupBody.parse(req.body);
+  if (contactIds.length === 0) return res.json({ added: 0 });
+
+  const existing = await db
+    .select({ contactId: contactGroupsTable.contactId })
+    .from(contactGroupsTable)
+    .where(and(eq(contactGroupsTable.groupId, groupId), inArray(contactGroupsTable.contactId, contactIds)));
+  const existingSet = new Set(existing.map((e) => e.contactId));
+  const toInsert = contactIds.filter((id) => !existingSet.has(id));
+
+  if (toInsert.length > 0) {
+    await db.insert(contactGroupsTable).values(toInsert.map((cid) => ({ contactId: cid, groupId })));
+  }
+  return res.json({ added: toInsert.length });
+});
+
 // ── Groups ─────────────────────────────────────────────────────────────────
 
 router.get("/groups", async (req, res) => {
@@ -250,6 +281,49 @@ router.delete("/groups/:id", async (req, res) => {
   const { id } = DeleteGroupParams.parse(req.params);
   await db.delete(groupsTable).where(eq(groupsTable.id, id));
   return res.status(204).send();
+});
+
+router.get("/groups/:id/members", async (req, res) => {
+  const { id } = ListGroupMembersParams.parse(req.params);
+  const query = ListGroupMembersQueryParams.parse(req.query);
+  const { page, limit } = query;
+
+  const memberships = await db
+    .select({ contactId: contactGroupsTable.contactId })
+    .from(contactGroupsTable)
+    .where(eq(contactGroupsTable.groupId, id));
+
+  const contactIds = memberships.map((m) => m.contactId);
+  if (contactIds.length === 0) return res.json({ data: [], total: 0, page, limit });
+
+  const [contacts, countResult] = await Promise.all([
+    db.select().from(contactsTable)
+      .where(inArray(contactsTable.id, contactIds))
+      .limit(limit)
+      .offset((page - 1) * limit)
+      .orderBy(contactsTable.name),
+    db.select({ count: sql<number>`count(*)::int` })
+      .from(contactsTable)
+      .where(inArray(contactsTable.id, contactIds)),
+  ]);
+
+  return res.json({
+    data: contacts.map((c) => ({ ...c, groupIds: [id] })),
+    total: countResult[0]?.count ?? 0,
+    page,
+    limit,
+  });
+});
+
+router.delete("/groups/:id/members", async (req, res) => {
+  const { id } = RemoveContactFromGroupParams.parse(req.params);
+  const query = RemoveContactFromGroupQueryParams.parse(req.query);
+  const contactId = query.contactId;
+
+  await db.delete(contactGroupsTable)
+    .where(and(eq(contactGroupsTable.groupId, id), eq(contactGroupsTable.contactId, contactId)));
+
+  return res.json({ removed: true });
 });
 
 router.post("/groups/:id/contacts", async (req, res) => {

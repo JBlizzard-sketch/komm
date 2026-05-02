@@ -1,14 +1,28 @@
-import { useParams } from "wouter";
-import { ArrowLeft, CheckCircle2, XCircle, Clock, Send as SendIcon, Users } from "lucide-react";
+import { useState } from "react";
+import { useParams, useLocation } from "wouter";
+import {
+  ArrowLeft, CheckCircle2, XCircle, Clock, Send as SendIcon,
+  Users, Copy, FlaskConical, Phone, Mail,
+} from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   useGetCampaign,
   useListCampaignMessages,
   useSendCampaign,
+  useTestCampaign,
+  useDuplicateCampaign,
   getGetCampaignQueryKey,
   getListCampaignMessagesQueryKey,
   getListCampaignsQueryKey,
@@ -26,12 +40,28 @@ const STATUS_CONFIG: Record<string, { label: string; icon: React.ElementType; cl
   opened: { label: "Opened", icon: CheckCircle2, className: "bg-purple-100 text-purple-800" },
 };
 
+const CAMPAIGN_STATUS_CLASS: Record<string, string> = {
+  sent: "bg-green-100 text-green-800",
+  draft: "bg-muted text-muted-foreground",
+  scheduled: "bg-amber-100 text-amber-800",
+  sending: "bg-blue-100 text-blue-800",
+  failed: "bg-red-100 text-red-800",
+};
+
 export default function CampaignDetail() {
   const { id } = useParams<{ id: string }>();
   const campaignId = parseInt(id);
+  const [, navigate] = useLocation();
   const qc = useQueryClient();
   const { toast } = useToast();
+
+  const [showTest, setShowTest] = useState(false);
+  const [testPhone, setTestPhone] = useState("");
+  const [testEmail, setTestEmail] = useState("");
+
   const sendCampaign = useSendCampaign();
+  const testCampaign = useTestCampaign();
+  const duplicateCampaign = useDuplicateCampaign();
 
   const { data: campaign, isLoading } = useGetCampaign(campaignId, {
     query: { enabled: !!campaignId, queryKey: getGetCampaignQueryKey(campaignId) },
@@ -59,9 +89,44 @@ export default function CampaignDetail() {
           qc.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() });
           toast({ title: "Campaign sent!" });
         },
-        onError: () => {
-          toast({ title: "Failed to send", variant: "destructive" });
+        onError: () => toast({ title: "Failed to send", variant: "destructive" }),
+      }
+    );
+  };
+
+  const handleDuplicate = () => {
+    duplicateCampaign.mutate(
+      { id: campaignId },
+      {
+        onSuccess: (newCampaign) => {
+          qc.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
+          toast({ title: "Campaign duplicated" });
+          navigate(`/campaigns/${newCampaign.id}`);
         },
+        onError: () => toast({ title: "Duplicate failed", variant: "destructive" }),
+      }
+    );
+  };
+
+  const handleTest = () => {
+    if (!testPhone) return;
+    testCampaign.mutate(
+      { id: campaignId, data: { phone: testPhone, email: testEmail || null } },
+      {
+        onSuccess: (result) => {
+          if (result.success) {
+            toast({
+              title: result.simulated ? "Test simulated ✓" : "Test message sent ✓",
+              description: result.simulated
+                ? "No real provider configured — message was simulated."
+                : `Message ID: ${result.messageId}`,
+            });
+          } else {
+            toast({ title: "Test failed", description: result.error ?? "Unknown error", variant: "destructive" });
+          }
+          setShowTest(false);
+        },
+        onError: () => toast({ title: "Test failed", variant: "destructive" }),
       }
     );
   };
@@ -77,15 +142,16 @@ export default function CampaignDetail() {
   }
 
   if (!campaign) {
-    return (
-      <div className="p-6 text-center text-muted-foreground">Campaign not found.</div>
-    );
+    return <div className="p-6 text-center text-muted-foreground">Campaign not found.</div>;
   }
 
   const deliveryPct = campaign.deliveryRate ?? 0;
+  const isDraft = campaign.status === "draft";
+  const isScheduled = campaign.status === "scheduled";
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
+      {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <Link href="/campaigns">
           <Button variant="ghost" size="icon" className="w-8 h-8">
@@ -98,20 +164,44 @@ export default function CampaignDetail() {
             Created {format(new Date(campaign.createdAt), "d MMM yyyy, HH:mm")}
           </p>
         </div>
-        {campaign.status === "draft" && (
+        <div className="flex items-center gap-2 shrink-0">
           <Button
-            onClick={handleSend}
-            disabled={sendCampaign.isPending}
-            className="gap-2 shrink-0"
-            data-testid="button-send-campaign"
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={handleDuplicate}
+            disabled={duplicateCampaign.isPending}
+            data-testid="button-duplicate-campaign"
           >
-            <SendIcon className="w-4 h-4" />
-            Send Now
+            <Copy className="w-4 h-4" />
+            Duplicate
           </Button>
-        )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => setShowTest(true)}
+            data-testid="button-test-campaign"
+          >
+            <FlaskConical className="w-4 h-4" />
+            Send Test
+          </Button>
+          {(isDraft || isScheduled) && (
+            <Button
+              onClick={handleSend}
+              disabled={sendCampaign.isPending}
+              size="sm"
+              className="gap-2"
+              data-testid="button-send-campaign"
+            >
+              <SendIcon className="w-4 h-4" />
+              {isDraft ? "Send Now" : "Send Now (Override Schedule)"}
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* Overview */}
+      {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <Card>
           <CardContent className="p-4 text-center">
@@ -121,13 +211,13 @@ export default function CampaignDetail() {
         </Card>
         <Card>
           <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-green-600">{(campaign as any).deliveredCount ?? 0}</p>
+            <p className="text-2xl font-bold text-green-600">{(campaign as { deliveredCount?: number }).deliveredCount ?? 0}</p>
             <p className="text-xs text-muted-foreground mt-1">Delivered</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-red-600">{(campaign as any).failedCount ?? 0}</p>
+            <p className="text-2xl font-bold text-red-600">{(campaign as { failedCount?: number }).failedCount ?? 0}</p>
             <p className="text-xs text-muted-foreground mt-1">Failed</p>
           </CardContent>
         </Card>
@@ -148,12 +238,7 @@ export default function CampaignDetail() {
               <Badge variant="outline" className="text-xs capitalize">{campaign.channel}</Badge>
               <Badge
                 variant="outline"
-                className={`text-xs ${
-                  campaign.status === "sent" ? "bg-green-100 text-green-800" :
-                  campaign.status === "draft" ? "bg-muted text-muted-foreground" :
-                  campaign.status === "scheduled" ? "bg-amber-100 text-amber-800" :
-                  "bg-muted text-muted-foreground"
-                }`}
+                className={`text-xs capitalize ${CAMPAIGN_STATUS_CLASS[campaign.status] ?? ""}`}
               >
                 {campaign.status}
               </Badge>
@@ -179,7 +264,6 @@ export default function CampaignDetail() {
           </div>
         </CardHeader>
 
-        {/* Header row */}
         <div className="flex items-center gap-4 px-5 py-2 border-y border-border bg-muted/30">
           <span className="flex-1 text-xs font-medium text-muted-foreground uppercase tracking-wide">Name</span>
           <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide w-32">Phone</span>
@@ -196,7 +280,7 @@ export default function CampaignDetail() {
             <div className="py-12 text-center">
               <Users className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
               <p className="text-sm text-muted-foreground">
-                {campaign.status === "draft" ? "Send this campaign to see delivery records." : "No delivery records yet."}
+                {isDraft ? "Send this campaign to see delivery records." : "No delivery records yet."}
               </p>
             </div>
           ) : (
@@ -205,11 +289,7 @@ export default function CampaignDetail() {
                 const s = STATUS_CONFIG[msg.status] ?? STATUS_CONFIG.pending;
                 const StatusIcon = s.icon;
                 return (
-                  <div
-                    key={msg.id}
-                    data-testid={`message-row-${msg.id}`}
-                    className="flex items-center gap-4 px-5 py-3"
-                  >
+                  <div key={msg.id} className="flex items-center gap-4 px-5 py-3">
                     <span className="flex-1 text-sm font-medium truncate">{msg.contactName}</span>
                     <span className="text-sm text-muted-foreground w-32">{msg.phone}</span>
                     <div className="flex items-center gap-1.5 w-24">
@@ -226,6 +306,62 @@ export default function CampaignDetail() {
           )}
         </CardContent>
       </Card>
+
+      {/* Send Test Dialog */}
+      <Dialog open={showTest} onOpenChange={setShowTest}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FlaskConical className="w-4 h-4 text-primary" />
+              Send Test Message
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Send the campaign message to a single number or email to verify it looks correct before broadcasting.
+            </p>
+            <div>
+              <label className="text-sm font-medium flex items-center gap-1.5 mb-1.5">
+                <Phone className="w-3.5 h-3.5" /> Phone Number
+              </label>
+              <Input
+                placeholder="+254712345678"
+                value={testPhone}
+                onChange={(e) => setTestPhone(e.target.value)}
+                data-testid="input-test-phone"
+              />
+            </div>
+            {campaign.channel === "email" && (
+              <div>
+                <label className="text-sm font-medium flex items-center gap-1.5 mb-1.5">
+                  <Mail className="w-3.5 h-3.5" /> Email Address
+                </label>
+                <Input
+                  placeholder="you@example.com"
+                  value={testEmail}
+                  onChange={(e) => setTestEmail(e.target.value)}
+                  data-testid="input-test-email"
+                />
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground bg-muted/50 rounded p-2">
+              Channel: <span className="font-medium capitalize">{campaign.channel}</span>
+              {" · "}
+              <span>Using configured provider</span>
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowTest(false)}>Cancel</Button>
+            <Button
+              onClick={handleTest}
+              disabled={!testPhone || testCampaign.isPending}
+              data-testid="button-send-test"
+            >
+              {testCampaign.isPending ? "Sending…" : "Send Test"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

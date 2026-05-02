@@ -135,6 +135,29 @@ export const ImportContactsResponse = zod.object({
 });
 
 /**
+ * @summary Delete multiple contacts
+ */
+export const BulkDeleteContactsBody = zod.object({
+  contactIds: zod.array(zod.number()),
+});
+
+export const BulkDeleteContactsResponse = zod.object({
+  deleted: zod.number(),
+});
+
+/**
+ * @summary Add multiple contacts to a group
+ */
+export const BulkAddContactsToGroupBody = zod.object({
+  contactIds: zod.array(zod.number()),
+  groupId: zod.number(),
+});
+
+export const BulkAddContactsToGroupResponse = zod.object({
+  added: zod.number(),
+});
+
+/**
  * @summary List contact groups
  */
 export const ListGroupsResponseItem = zod.object({
@@ -179,6 +202,54 @@ export const UpdateGroupResponse = zod.object({
  */
 export const DeleteGroupParams = zod.object({
   id: zod.coerce.number(),
+});
+
+/**
+ * @summary List contacts belonging to a group
+ */
+export const ListGroupMembersParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const listGroupMembersQueryPageDefault = 1;
+export const listGroupMembersQueryLimitDefault = 100;
+
+export const ListGroupMembersQueryParams = zod.object({
+  page: zod.coerce.number().default(listGroupMembersQueryPageDefault),
+  limit: zod.coerce.number().default(listGroupMembersQueryLimitDefault),
+});
+
+export const ListGroupMembersResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      id: zod.number(),
+      name: zod.string(),
+      phone: zod.string(),
+      email: zod.string().nullish(),
+      channel: zod.enum(["sms", "whatsapp", "email"]),
+      groupIds: zod.array(zod.number()).optional(),
+      customFields: zod.record(zod.string(), zod.string()).nullish(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+  total: zod.number(),
+  page: zod.number(),
+  limit: zod.number(),
+});
+
+/**
+ * @summary Remove a contact from a group
+ */
+export const RemoveContactFromGroupParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const RemoveContactFromGroupQueryParams = zod.object({
+  contactId: zod.coerce.number(),
+});
+
+export const RemoveContactFromGroupResponse = zod.object({
+  removed: zod.boolean(),
 });
 
 /**
@@ -422,6 +493,32 @@ export const SendCampaignResponse = zod.object({
   scheduledAt: zod.coerce.date().nullish(),
   sentAt: zod.coerce.date().nullish(),
   createdAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Send a single test message to a specific number/email
+ */
+export const TestCampaignParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const TestCampaignBody = zod.object({
+  phone: zod.string(),
+  email: zod.string().nullish(),
+});
+
+export const TestCampaignResponse = zod.object({
+  success: zod.boolean(),
+  simulated: zod.boolean(),
+  messageId: zod.string().nullish(),
+  error: zod.string().nullish(),
+});
+
+/**
+ * @summary Duplicate a campaign as a new draft
+ */
+export const DuplicateCampaignParams = zod.object({
+  id: zod.coerce.number(),
 });
 
 /**
