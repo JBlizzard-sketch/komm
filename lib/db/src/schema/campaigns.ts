@@ -24,6 +24,7 @@ export const campaignMessagesTable = pgTable("campaign_messages", {
   contactName: text("contact_name").notNull(),
   phone: text("phone").notNull(),
   status: text("status").notNull().default("pending"),
+  providerMessageId: text("provider_message_id"),
   errorMessage: text("error_message"),
   deliveredAt: timestamp("delivered_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),

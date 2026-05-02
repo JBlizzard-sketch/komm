@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  useGetContact, useDeleteContact,
+  useGetContact, useDeleteContact, useListGroups,
   getListContactsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -54,6 +54,8 @@ export default function ContactDetail() {
       enabled: !!contactId && !isNaN(contactId),
     },
   });
+
+  const { data: allGroups } = useListGroups({ query: { queryKey: ["groups"] } });
 
   useEffect(() => {
     if (!contact) return;
@@ -195,11 +197,14 @@ export default function ContactDetail() {
                 <p className="text-sm text-muted-foreground mt-0.5">No groups</p>
               ) : (
                 <div className="flex flex-wrap gap-1 mt-1">
-                  {(contact.groupIds ?? []).map((gid) => (
-                    <Badge key={gid} variant="outline" className="text-xs">
-                      Group {gid}
-                    </Badge>
-                  ))}
+                  {(contact.groupIds ?? []).map((gid) => {
+                    const grp = allGroups?.find((g) => g.id === gid);
+                    return (
+                      <Badge key={gid} variant="outline" className="text-xs">
+                        {grp ? grp.name : `Group ${gid}`}
+                      </Badge>
+                    );
+                  })}
                 </div>
               )}
             </div>

@@ -28,8 +28,6 @@ router.post("/webhooks/at/delivery", async (req, res) => {
   const ourStatus = statusMap[status ?? ""] ?? "sent";
 
   try {
-    // Find message records with this messageId — stored in errorMessage field as fallback
-    // In production you'd store messageId in campaign_messages; for now update by matching status
     const updated = await db
       .update(campaignMessagesTable)
       .set({
@@ -37,7 +35,7 @@ router.post("/webhooks/at/delivery", async (req, res) => {
         deliveredAt: ourStatus === "delivered" ? new Date() : null,
         errorMessage: ourStatus === "failed" ? (status ?? null) : null,
       })
-      .where(eq(campaignMessagesTable.status, "sent"))
+      .where(eq(campaignMessagesTable.providerMessageId, id))
       .returning({ id: campaignMessagesTable.id });
 
     return res.json({ updated: updated.length });
@@ -135,7 +133,7 @@ router.post("/webhooks/whatsapp", async (req, res) => {
             status: ourStatus,
             deliveredAt: ourStatus === "delivered" || ourStatus === "opened" ? new Date(parseInt(s.timestamp) * 1000) : null,
           })
-          .where(eq(campaignMessagesTable.status, "sent"));
+          .where(eq(campaignMessagesTable.providerMessageId, s.id));
       } catch (err) {
         logger.error({ err }, "WhatsApp status update error");
       }

@@ -26,7 +26,7 @@ router.post("/messages/quick-send", async (req, res) => {
   if (!channel || !body || (!phone && !email)) {
     return res.status(400).json({ error: "channel, body, and phone (or email) are required" });
   }
-  const result = await sendMessage(channel, phone ?? null, email ?? null, body);
+  const result = await sendMessage(channel, phone ?? "", email ?? null, body);
   return res.json({
     success: result.success,
     simulated: result.simulated ?? false,
@@ -193,7 +193,7 @@ router.post("/campaigns/:id/send", async (req, res) => {
   }
 
   // Gather all contacts in the target groups
-  let contacts: { id: number; name: string; phone: string; email: string | null; channel: string }[] = [];
+  let contacts: { id: number; name: string; phone: string; email: string | null; channel: string; customFields: Record<string, string> | null }[] = [];
   if (campaign.groupIds.length > 0) {
     const memberships = await db
       .select({ contactId: contactGroupsTable.contactId })
@@ -208,6 +208,7 @@ router.post("/campaigns/:id/send", async (req, res) => {
           phone: contactsTable.phone,
           email: contactsTable.email,
           channel: contactsTable.channel,
+          customFields: contactsTable.customFields,
         })
         .from(contactsTable)
         .where(and(inArray(contactsTable.id, contactIds), eq(contactsTable.optedOut, false)));
@@ -217,18 +218,40 @@ router.post("/campaigns/:id/send", async (req, res) => {
   // Mark campaign as sending
   await db.update(campaignsTable).set({ status: "sending" }).where(eq(campaignsTable.id, id));
 
+  // Variable substitution helper
+  const substituteVars = (template: string, contact: typeof contacts[number]) => {
+    const today = new Date();
+    const due = new Date(today); due.setDate(due.getDate() + 7);
+    const fmt = (d: Date) => d.toLocaleDateString("en-KE", { day: "numeric", month: "long", year: "numeric" });
+    const defaults: Record<string, string> = {
+      name: contact.name,
+      date: fmt(today),
+      due: fmt(due),
+      amount: contact.customFields?.["amount"] ?? "",
+      balance: contact.customFields?.["balance"] ?? "",
+    };
+    const vars = { ...defaults, ...(contact.customFields ?? {}) };
+    return template.replace(/{{(\w+)}}/g, (_, key: string) => vars[key] ?? `{{${key}}}`);
+  };
+
   // Send messages (real or simulated)
   const messageRows = [];
   for (const contact of contacts) {
-    const body = campaign.body.replace(/{{name}}/g, contact.name);
+    const body = substituteVars(campaign.body, contact);
     const result = await sendMessage(campaign.channel, contact.phone, contact.email, body);
+    // For simulated sends mark delivered immediately; for real sends start as "sent"
+    // and let delivery webhooks update to delivered/failed
+    const initialStatus = result.simulated
+      ? (result.success ? "delivered" : "failed")
+      : (result.success ? "sent" : "failed");
     messageRows.push({
       campaignId: id,
       contactId: contact.id,
       contactName: contact.name,
       phone: contact.phone,
-      status: result.success ? "delivered" : "failed",
-      deliveredAt: result.success ? new Date() : null,
+      status: initialStatus,
+      providerMessageId: result.messageId ?? null,
+      deliveredAt: initialStatus === "delivered" ? new Date() : null,
       errorMessage: result.error ?? null,
     });
   }
