@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link } from "wouter";
 import {
   BarChart2, TrendingUp, Send, Users, CheckCircle2,
@@ -160,6 +160,21 @@ export default function Reports() {
     cost: (COST_PER_MSG[b.channel] ?? 0) * b.count,
   }));
   const totalCost = costByChannel.reduce((s, c) => s + c.cost, 0);
+
+  const deliveryRateByChannel = useMemo(() => {
+    if (!reportCampaigns || reportCampaigns.length === 0) return [];
+    const grouped: Record<string, { total: number; delivered: number }> = {};
+    for (const c of reportCampaigns) {
+      if (!grouped[c.channel]) grouped[c.channel] = { total: 0, delivered: 0 };
+      grouped[c.channel].total += c.recipientCount;
+      grouped[c.channel].delivered += c.deliveredCount ?? 0;
+    }
+    return Object.entries(grouped).map(([ch, { total, delivered }]) => ({
+      channel: CHANNEL_LABELS[ch] ?? ch,
+      rate: total > 0 ? Math.round((delivered / total) * 100) : 0,
+      fill: CHANNEL_COLORS[ch] ?? "#999",
+    }));
+  }, [reportCampaigns]);
 
   const totalSent = (breakdown ?? []).reduce((s, b) => s + b.count, 0);
   const rangeLabel = RANGE_OPTIONS.find((r) => r.days === days)?.label ?? `${days} days`;
@@ -377,6 +392,34 @@ export default function Reports() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Delivery rate by channel */}
+      {deliveryRateByChannel.length > 0 && (
+        <Card className="mb-5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold">Delivery Rate by Channel</CardTitle>
+            <CardDescription className="text-xs">Average delivery rate across campaigns, grouped by channel</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={130}>
+              <BarChart data={deliveryRateByChannel} margin={{ top: 4, right: 12, bottom: 0, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                <XAxis dataKey="channel" tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
+                <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+                <Tooltip
+                  contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid hsl(var(--border))" }}
+                  formatter={(v) => [`${v}%`, "Delivery Rate"]}
+                />
+                <Bar dataKey="rate" radius={[4, 4, 0, 0]} maxBarSize={60}>
+                  {deliveryRateByChannel.map((entry, i) => (
+                    <Cell key={i} fill={entry.fill} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Campaign performance table */}
       <Card>

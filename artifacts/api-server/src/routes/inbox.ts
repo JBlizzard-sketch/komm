@@ -13,9 +13,11 @@ router.get("/inbox", async (req, res) => {
   const query = ListInboxMessagesQueryParams.parse(req.query);
   const { read, page, limit } = query;
   const search = typeof req.query["search"] === "string" ? req.query["search"].trim() : undefined;
+  const channel = typeof req.query["channel"] === "string" && req.query["channel"] !== "all" ? req.query["channel"] : undefined;
 
   const conditions: ReturnType<typeof eq>[] = [];
   if (read !== undefined) conditions.push(eq(inboxMessagesTable.read, read));
+  if (channel) conditions.push(eq(inboxMessagesTable.channel, channel as "sms" | "whatsapp"));
   if (search) {
     conditions.push(
       or(

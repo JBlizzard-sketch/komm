@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { Link } from "wouter";
 import {
   CheckCheck, Inbox as InboxIcon, CheckSquare, ChevronLeft, ChevronRight, UserCircle, Reply, Search, X,
@@ -31,6 +31,7 @@ const PAGE_SIZE = 25;
 
 export default function Inbox() {
   const [readFilter, setReadFilter] = useState<string>("all");
+  const [channelFilter, setChannelFilter] = useState<string>("all");
   const [markingAll, setMarkingAll] = useState(false);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -81,13 +82,14 @@ export default function Inbox() {
 
   const { data, isLoading } = useListInboxMessages(queryArgs, {
     query: {
-      queryKey: [...getListInboxMessagesQueryKey(queryArgs), debouncedSearch],
+      queryKey: [...getListInboxMessagesQueryKey(queryArgs), debouncedSearch, channelFilter],
       queryFn: async () => {
         const qs = new URLSearchParams();
         if (queryArgs.read !== undefined) qs.set("read", String(queryArgs.read));
         qs.set("page", String(queryArgs.page));
         qs.set("limit", String(queryArgs.limit));
         if (debouncedSearch) qs.set("search", debouncedSearch);
+        if (channelFilter !== "all") qs.set("channel", channelFilter);
         const res = await fetch(`/api/inbox?${qs}`);
         return res.json();
       },
@@ -129,6 +131,13 @@ export default function Inbox() {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const handleFilterChange = (v: string) => { setReadFilter(v); setPage(1); setSearch(""); setDebouncedSearch(""); };
+  const handleChannelChange = (v: string) => { setChannelFilter(v); setPage(1); };
+
+  const channelFilters = useMemo(() => [
+    { value: "all", label: "All" },
+    { value: "sms", label: "SMS" },
+    { value: "whatsapp", label: "WhatsApp" },
+  ], []);
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -178,6 +187,25 @@ export default function Inbox() {
             </Button>
           )}
 
+          {/* Channel filter */}
+          <div className="flex gap-1 bg-muted rounded-lg p-1">
+            {channelFilters.map((f) => (
+              <button
+                key={f.value}
+                data-testid={`inbox-channel-${f.value}`}
+                onClick={() => handleChannelChange(f.value)}
+                className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                  channelFilter === f.value
+                    ? "bg-background shadow-sm text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Read/unread filter */}
           <div className="flex gap-1 bg-muted rounded-lg p-1">
             {[
               { value: "all", label: "All" },
