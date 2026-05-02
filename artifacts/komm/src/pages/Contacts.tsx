@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import {
   Plus, Upload, Search, Trash2, Users, FileSpreadsheet,
-  CheckCircle2, AlertCircle, X, Download, UserPlus, CheckSquare, Square,
+  CheckCircle2, AlertCircle, X, Download, UserPlus, CheckSquare, Square, Edit2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,7 +19,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
-  useListContacts, useCreateContact, useDeleteContact,
+  useListContacts, useCreateContact, useDeleteContact, useUpdateContact,
   useImportContacts, useBulkDeleteContacts, useBulkAddContactsToGroup,
   useListGroups,
   getListContactsQueryKey, getListGroupsQueryKey, getGetDashboardStatsQueryKey,
@@ -27,6 +27,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import type { Contact } from "@workspace/api-client-react";
 
 const contactSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -149,10 +150,155 @@ function CSVImportDialog({ open, onClose, groups }: { open: boolean; onClose: ()
   );
 }
 
+function ContactFormDialog({
+  open, onClose, editContact, groups,
+}: {
+  open: boolean;
+  onClose: () => void;
+  editContact: Contact | null;
+  groups: { id: number; name: string; contactCount: number }[];
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const createContact = useCreateContact();
+  const updateContact = useUpdateContact();
+  const isEdit = !!editContact;
+
+  const form = useForm<ContactFormValues>({
+    resolver: zodResolver(contactSchema),
+    defaultValues: { name: "", phone: "", email: "", channel: "sms", groupIds: [] },
+  });
+
+  // Pre-fill when editing
+  useState(() => {
+    if (editContact) {
+      form.reset({
+        name: editContact.name,
+        phone: editContact.phone,
+        email: editContact.email ?? "",
+        channel: editContact.channel as "sms" | "whatsapp" | "email",
+        groupIds: editContact.groupIds ?? [],
+      });
+    } else {
+      form.reset({ name: "", phone: "", email: "", channel: "sms", groupIds: [] });
+    }
+  });
+
+  // Reset form when dialog opens
+  const handleOpenChange = (open: boolean) => {
+    if (open && editContact) {
+      form.reset({
+        name: editContact.name,
+        phone: editContact.phone,
+        email: editContact.email ?? "",
+        channel: editContact.channel as "sms" | "whatsapp" | "email",
+        groupIds: editContact.groupIds ?? [],
+      });
+    } else if (!open) {
+      onClose();
+    }
+  };
+
+  const selectedGroupIds = form.watch("groupIds");
+  const toggleGroup = (gid: number) => {
+    const current = form.getValues("groupIds");
+    form.setValue("groupIds", current.includes(gid) ? current.filter((id) => id !== gid) : [...current, gid]);
+  };
+
+  const onSubmit = (values: ContactFormValues) => {
+    if (isEdit && editContact) {
+      updateContact.mutate(
+        { id: editContact.id, data: { name: values.name, phone: values.phone, email: values.email || null, channel: values.channel, groupIds: values.groupIds } },
+        {
+          onSuccess: () => {
+            qc.invalidateQueries({ queryKey: getListContactsQueryKey() });
+            qc.invalidateQueries({ queryKey: getListGroupsQueryKey() });
+            toast({ title: "Contact updated" });
+            onClose();
+          },
+          onError: () => toast({ title: "Failed to update contact", variant: "destructive" }),
+        }
+      );
+    } else {
+      createContact.mutate(
+        { data: { name: values.name, phone: values.phone, email: values.email || null, channel: values.channel, groupIds: values.groupIds } },
+        {
+          onSuccess: () => {
+            qc.invalidateQueries({ queryKey: getListContactsQueryKey() });
+            qc.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() });
+            qc.invalidateQueries({ queryKey: getListGroupsQueryKey() });
+            toast({ title: "Contact added" });
+            onClose();
+            form.reset();
+          },
+          onError: () => toast({ title: "Failed to add contact", variant: "destructive" }),
+        }
+      );
+    }
+  };
+
+  const isPending = createContact.isPending || updateContact.isPending;
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader><DialogTitle>{isEdit ? "Edit Contact" : "Add Contact"}</DialogTitle></DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField control={form.control} name="name" render={({ field }) => (
+              <FormItem><FormLabel>Full Name</FormLabel><FormControl><Input placeholder="Jane Wambua" data-testid="input-contact-name" {...field} /></FormControl><FormMessage /></FormItem>
+            )} />
+            <FormField control={form.control} name="phone" render={({ field }) => (
+              <FormItem><FormLabel>Phone Number</FormLabel><FormControl><Input placeholder="+254712345678" {...field} /></FormControl><FormMessage /></FormItem>
+            )} />
+            <FormField control={form.control} name="email" render={({ field }) => (
+              <FormItem><FormLabel>Email (optional)</FormLabel><FormControl><Input placeholder="jane@example.com" {...field} /></FormControl><FormMessage /></FormItem>
+            )} />
+            <FormField control={form.control} name="channel" render={({ field }) => (
+              <FormItem><FormLabel>Preferred Channel</FormLabel>
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="sms">SMS</SelectItem>
+                    <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                    <SelectItem value="email">Email</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )} />
+            {groups.length > 0 && (
+              <div>
+                <label className="text-sm font-medium block mb-2">Groups</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {groups.map((g) => (
+                    <button key={g.id} type="button" onClick={() => toggleGroup(g.id)}
+                      className={`px-2.5 py-1 rounded-full border text-xs transition-colors ${selectedGroupIds.includes(g.id) ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-muted-foreground/40"}`}
+                    >
+                      {g.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+              <Button type="submit" disabled={isPending} data-testid="button-save-contact">
+                {isPending ? (isEdit ? "Saving…" : "Adding…") : (isEdit ? "Save Changes" : "Add Contact")}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function Contacts() {
   const [search, setSearch] = useState("");
   const [groupFilter, setGroupFilter] = useState("all");
-  const [showAdd, setShowAdd] = useState(false);
+  const [showContactForm, setShowContactForm] = useState(false);
+  const [editContact, setEditContact] = useState<Contact | null>(null);
   const [showImport, setShowImport] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [showBulkGroup, setShowBulkGroup] = useState(false);
@@ -168,12 +314,13 @@ export default function Contacts() {
   );
 
   const contacts = data?.data ?? [];
-  const createContact = useCreateContact();
   const deleteContact = useDeleteContact();
   const bulkDelete = useBulkDeleteContacts();
   const bulkGroup = useBulkAddContactsToGroup();
 
-  const form = useForm<ContactFormValues>({ resolver: zodResolver(contactSchema), defaultValues: { name: "", phone: "", email: "", channel: "sms", groupIds: [] } });
+  const openAdd = () => { setEditContact(null); setShowContactForm(true); };
+  const openEdit = (c: Contact) => { setEditContact(c); setShowContactForm(true); };
+  const closeForm = () => { setShowContactForm(false); setEditContact(null); };
 
   const toggleSelect = (id: number) => {
     setSelected((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
@@ -217,19 +364,13 @@ export default function Contacts() {
     );
   };
 
-  const onSubmit = (values: ContactFormValues) => {
-    createContact.mutate(
-      { data: { name: values.name, phone: values.phone, email: values.email || null, channel: values.channel, groupIds: values.groupIds } },
-      {
-        onSuccess: () => { qc.invalidateQueries({ queryKey: getListContactsQueryKey() }); qc.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() }); toast({ title: "Contact added" }); setShowAdd(false); form.reset(); },
-        onError: () => toast({ title: "Failed to add contact", variant: "destructive" }),
-      }
-    );
-  };
-
   const handleDelete = (id: number) => {
     deleteContact.mutate({ id }, {
-      onSuccess: () => { qc.invalidateQueries({ queryKey: getListContactsQueryKey() }); qc.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() }); toast({ title: "Contact removed" }); },
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getListContactsQueryKey() });
+        qc.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() });
+        toast({ title: "Contact removed" });
+      },
     });
   };
 
@@ -250,13 +391,12 @@ export default function Contacts() {
           <Button variant="outline" size="sm" className="gap-2" onClick={() => setShowImport(true)} data-testid="button-import">
             <Upload className="w-4 h-4" />Import CSV
           </Button>
-          <Button size="sm" className="gap-2" onClick={() => setShowAdd(true)} data-testid="button-add-contact">
+          <Button size="sm" className="gap-2" onClick={openAdd} data-testid="button-add-contact">
             <Plus className="w-4 h-4" />Add Contact
           </Button>
         </div>
       </div>
 
-      {/* Filters */}
       <div className="flex gap-3 mb-4">
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
@@ -271,7 +411,6 @@ export default function Contacts() {
         </Select>
       </div>
 
-      {/* Bulk actions bar */}
       {someSelected && (
         <div className="flex items-center gap-3 mb-3 px-4 py-2.5 bg-primary/5 border border-primary/20 rounded-lg">
           <span className="text-sm font-medium text-primary">{selected.size} selected</span>
@@ -298,7 +437,7 @@ export default function Contacts() {
           <span className="w-24 text-xs font-medium text-muted-foreground uppercase tracking-wide">Channel</span>
           <span className="flex-1 text-xs font-medium text-muted-foreground uppercase tracking-wide">Groups</span>
           <span className="w-28 text-xs font-medium text-muted-foreground uppercase tracking-wide text-right">Added</span>
-          <span className="w-7" />
+          <span className="w-14" />
         </div>
 
         <CardContent className="p-0">
@@ -311,7 +450,7 @@ export default function Contacts() {
               <p className="text-xs text-muted-foreground mt-1">Add contacts manually or import from a CSV file.</p>
               <div className="flex gap-2 justify-center mt-4">
                 <Button variant="outline" size="sm" className="gap-2" onClick={() => setShowImport(true)}><Upload className="w-4 h-4" />Import CSV</Button>
-                <Button size="sm" className="gap-2" onClick={() => setShowAdd(true)}><Plus className="w-4 h-4" />Add Contact</Button>
+                <Button size="sm" className="gap-2" onClick={openAdd}><Plus className="w-4 h-4" />Add Contact</Button>
               </div>
             </div>
           ) : (
@@ -334,9 +473,14 @@ export default function Contacts() {
                     {(contact.groupIds ?? []).length > 3 && <Badge variant="outline" className="text-[10px]">+{(contact.groupIds ?? []).length - 3}</Badge>}
                   </div>
                   <span className="text-xs text-muted-foreground w-28 text-right shrink-0">{format(new Date(contact.createdAt), "MMM d, yyyy")}</span>
-                  <button onClick={() => handleDelete(contact.id)} className="w-7 h-7 flex items-center justify-center rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-all shrink-0">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-all shrink-0 w-14 justify-end">
+                    <button onClick={() => openEdit(contact)} className="w-7 h-7 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted" data-testid={`edit-contact-${contact.id}`}>
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => handleDelete(contact.id)} className="w-7 h-7 flex items-center justify-center rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10" data-testid={`delete-contact-${contact.id}`}>
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -344,7 +488,6 @@ export default function Contacts() {
         </CardContent>
       </Card>
 
-      {/* Bulk add to group dialog */}
       <Dialog open={showBulkGroup} onOpenChange={setShowBulkGroup}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader><DialogTitle>Add {selected.size} Contacts to Group</DialogTitle></DialogHeader>
@@ -369,24 +512,12 @@ export default function Contacts() {
 
       <CSVImportDialog open={showImport} onClose={() => setShowImport(false)} groups={groups ?? []} />
 
-      {/* Add contact dialog */}
-      <Dialog open={showAdd} onOpenChange={setShowAdd}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>Add Contact</DialogTitle></DialogHeader>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField control={form.control} name="name" render={({ field }) => (<FormItem><FormLabel>Full Name</FormLabel><FormControl><Input placeholder="Jane Wambua" {...field} /></FormControl><FormMessage /></FormItem>)} />
-              <FormField control={form.control} name="phone" render={({ field }) => (<FormItem><FormLabel>Phone Number</FormLabel><FormControl><Input placeholder="+254712345678" {...field} /></FormControl><FormMessage /></FormItem>)} />
-              <FormField control={form.control} name="email" render={({ field }) => (<FormItem><FormLabel>Email (optional)</FormLabel><FormControl><Input placeholder="jane@example.com" {...field} /></FormControl><FormMessage /></FormItem>)} />
-              <FormField control={form.control} name="channel" render={({ field }) => (<FormItem><FormLabel>Preferred Channel</FormLabel><Select value={field.value} onValueChange={field.onChange}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="sms">SMS</SelectItem><SelectItem value="whatsapp">WhatsApp</SelectItem><SelectItem value="email">Email</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setShowAdd(false)}>Cancel</Button>
-                <Button type="submit" disabled={createContact.isPending}>Add Contact</Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
+      <ContactFormDialog
+        open={showContactForm}
+        onClose={closeForm}
+        editContact={editContact}
+        groups={groups ?? []}
+      />
     </div>
   );
 }

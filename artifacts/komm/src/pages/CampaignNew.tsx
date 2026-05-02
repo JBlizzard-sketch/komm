@@ -1,36 +1,28 @@
 import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { ArrowLeft, MessageSquare, Mail, Send } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  useCreateCampaign,
-  useListGroups,
-  useListTemplates,
-  getListCampaignsQueryKey,
-  getGetDashboardStatsQueryKey,
-  getGetDashboardActivityQueryKey,
-  getListGroupsQueryKey,
-  getListTemplatesQueryKey,
+  useCreateCampaign, useUpdateCampaign, useSendCampaign,
+  useGetCampaign,
+  useListGroups, useListTemplates,
+  getListCampaignsQueryKey, getGetDashboardStatsQueryKey, getGetDashboardActivityQueryKey,
+  getGetCampaignQueryKey, getListGroupsQueryKey, getListTemplatesQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { format } from "date-fns";
 
 const schema = z.object({
   name: z.string().min(1, "Campaign name is required"),
@@ -40,7 +32,6 @@ const schema = z.object({
   groupIds: z.array(z.number()),
   scheduledAt: z.string().optional(),
 });
-
 type FormValues = z.infer<typeof schema>;
 
 function smsSegments(text: string) {
@@ -58,27 +49,46 @@ const CHANNELS = [
 
 export default function CampaignNew() {
   const [, setLocation] = useLocation();
+  const search = useSearch();
+  const params = new URLSearchParams(search);
+  const editId = params.get("edit") ? parseInt(params.get("edit")!) : null;
+
   const qc = useQueryClient();
   const { toast } = useToast();
+  const [submitting, setSubmitting] = useState(false);
+
   const createCampaign = useCreateCampaign();
+  const updateCampaign = useUpdateCampaign();
+  const sendCampaign = useSendCampaign();
+
+  const { data: existingCampaign, isLoading: loadingEdit } = useGetCampaign(
+    editId ?? 0,
+    { query: { queryKey: getGetCampaignQueryKey(editId ?? 0), enabled: !!editId } }
+  );
 
   const { data: groups } = useListGroups({ query: { queryKey: getListGroupsQueryKey() } });
-  const { data: templates } = useListTemplates(
-    {},
-    { query: { queryKey: getListTemplatesQueryKey() } }
-  );
+  const { data: templates } = useListTemplates({}, { query: { queryKey: getListTemplatesQueryKey() } });
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: {
-      name: "",
-      channel: "sms",
-      body: "",
-      templateId: null,
-      groupIds: [],
-      scheduledAt: "",
-    },
+    defaultValues: { name: "", channel: "sms", body: "", templateId: null, groupIds: [], scheduledAt: "" },
   });
+
+  // Pre-fill form when editing an existing campaign
+  useEffect(() => {
+    if (existingCampaign && editId) {
+      form.reset({
+        name: existingCampaign.name,
+        channel: existingCampaign.channel as "sms" | "whatsapp" | "email",
+        body: existingCampaign.body ?? "",
+        templateId: existingCampaign.templateId ?? null,
+        groupIds: existingCampaign.groupIds ?? [],
+        scheduledAt: existingCampaign.scheduledAt
+          ? format(new Date(existingCampaign.scheduledAt), "yyyy-MM-dd'T'HH:mm")
+          : "",
+      });
+    }
+  }, [existingCampaign, editId]);
 
   const channel = form.watch("channel");
   const body = form.watch("body");
@@ -86,98 +96,133 @@ export default function CampaignNew() {
   const { chars, segments } = smsSegments(body);
 
   const handleTemplateSelect = (templateId: string) => {
-    if (templateId === "none") {
-      form.setValue("templateId", null);
-      return;
-    }
+    if (templateId === "none") { form.setValue("templateId", null); return; }
     const tid = parseInt(templateId);
     const tmpl = templates?.find((t) => t.id === tid);
-    if (tmpl) {
-      form.setValue("templateId", tid);
-      form.setValue("body", tmpl.body);
-    }
+    if (tmpl) { form.setValue("templateId", tid); form.setValue("body", tmpl.body); }
   };
 
   const toggleGroup = (gid: number) => {
     const current = form.getValues("groupIds");
-    if (current.includes(gid)) {
-      form.setValue("groupIds", current.filter((id) => id !== gid));
-    } else {
-      form.setValue("groupIds", [...current, gid]);
-    }
+    form.setValue("groupIds", current.includes(gid) ? current.filter((id) => id !== gid) : [...current, gid]);
   };
 
-  const onSubmit = (values: FormValues, sendNow = false) => {
-    createCampaign.mutate(
+  const invalidateAll = (campaignId: number) => {
+    qc.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
+    qc.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() });
+    qc.invalidateQueries({ queryKey: getGetDashboardActivityQueryKey() });
+    qc.invalidateQueries({ queryKey: getGetCampaignQueryKey(campaignId) });
+  };
+
+  const doSend = (campaignId: number, onDone: () => void) => {
+    sendCampaign.mutate(
+      { id: campaignId },
       {
-        data: {
-          name: values.name,
-          channel: values.channel,
-          body: values.body,
-          templateId: values.templateId ?? null,
-          groupIds: values.groupIds,
-          scheduledAt: values.scheduledAt ? new Date(values.scheduledAt).toISOString() : null,
-        },
-      },
-      {
-        onSuccess: (campaign) => {
-          qc.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
-          qc.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() });
-          qc.invalidateQueries({ queryKey: getGetDashboardActivityQueryKey() });
-          toast({ title: sendNow ? "Campaign sent!" : "Campaign saved as draft" });
-          setLocation(`/campaigns/${campaign.id}`);
+        onSuccess: () => {
+          invalidateAll(campaignId);
+          toast({ title: "Campaign sent!" });
+          onDone();
         },
         onError: () => {
-          toast({ title: "Failed to create campaign", variant: "destructive" });
+          invalidateAll(campaignId);
+          toast({ title: "Campaign saved but send failed", variant: "destructive" });
+          onDone();
         },
       }
     );
   };
 
+  const onSubmit = (values: FormValues, sendNow = false) => {
+    if (submitting) return;
+    setSubmitting(true);
+
+    const payload = {
+      name: values.name,
+      channel: values.channel,
+      body: values.body,
+      templateId: values.templateId ?? null,
+      groupIds: values.groupIds,
+      scheduledAt: values.scheduledAt ? new Date(values.scheduledAt).toISOString() : null,
+    };
+
+    if (editId) {
+      updateCampaign.mutate(
+        { id: editId, data: payload },
+        {
+          onSuccess: (campaign) => {
+            if (sendNow) {
+              doSend(campaign.id, () => { setSubmitting(false); setLocation(`/campaigns/${campaign.id}`); });
+            } else {
+              invalidateAll(campaign.id);
+              toast({ title: "Campaign updated" });
+              setSubmitting(false);
+              setLocation(`/campaigns/${campaign.id}`);
+            }
+          },
+          onError: () => { toast({ title: "Failed to update campaign", variant: "destructive" }); setSubmitting(false); },
+        }
+      );
+    } else {
+      createCampaign.mutate(
+        { data: payload },
+        {
+          onSuccess: (campaign) => {
+            if (sendNow) {
+              doSend(campaign.id, () => { setSubmitting(false); setLocation(`/campaigns/${campaign.id}`); });
+            } else {
+              invalidateAll(campaign.id);
+              toast({ title: "Draft saved" });
+              setSubmitting(false);
+              setLocation(`/campaigns/${campaign.id}`);
+            }
+          },
+          onError: () => { toast({ title: "Failed to create campaign", variant: "destructive" }); setSubmitting(false); },
+        }
+      );
+    }
+  };
+
+  if (editId && loadingEdit) {
+    return (
+      <div className="p-6 max-w-3xl mx-auto space-y-5">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-32 w-full" />
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 max-w-3xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
-        <Button variant="ghost" size="icon" onClick={() => setLocation("/campaigns")} className="w-8 h-8">
+        <Button variant="ghost" size="icon" onClick={() => setLocation(editId ? `/campaigns/${editId}` : "/campaigns")} className="w-8 h-8">
           <ArrowLeft className="w-4 h-4" />
         </Button>
         <div>
-          <h1 className="text-xl font-semibold">New Campaign</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Compose and send a message to your members</p>
+          <h1 className="text-xl font-semibold">{editId ? "Edit Campaign" : "New Campaign"}</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {editId ? "Update this campaign's details" : "Compose and send a message to your members"}
+          </p>
         </div>
       </div>
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit((v) => onSubmit(v, false))} className="space-y-5">
-          {/* Campaign name */}
-          <FormField
-            control={form.control}
-            name="name"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Campaign Name</FormLabel>
-                <FormControl>
-                  <Input placeholder="e.g. June Contribution Reminder" data-testid="input-campaign-name" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <FormField control={form.control} name="name" render={({ field }) => (
+            <FormItem>
+              <FormLabel>Campaign Name</FormLabel>
+              <FormControl><Input placeholder="e.g. June Contribution Reminder" data-testid="input-campaign-name" {...field} /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )} />
 
-          {/* Channel */}
           <div>
             <Label className="text-sm font-medium">Channel</Label>
             <div className="grid grid-cols-3 gap-3 mt-2">
               {CHANNELS.map((ch) => (
-                <button
-                  key={ch.value}
-                  type="button"
-                  data-testid={`channel-${ch.value}`}
+                <button key={ch.value} type="button" data-testid={`channel-${ch.value}`}
                   onClick={() => form.setValue("channel", ch.value as "sms" | "whatsapp" | "email")}
-                  className={`p-3 rounded-lg border text-left transition-colors ${
-                    channel === ch.value
-                      ? "border-primary bg-primary/5 ring-1 ring-primary"
-                      : "border-border hover:border-muted-foreground/30"
-                  }`}
+                  className={`p-3 rounded-lg border text-left transition-colors ${channel === ch.value ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border hover:border-muted-foreground/30"}`}
                 >
                   <p className="text-sm font-semibold">{ch.label}</p>
                   <p className="text-xs text-muted-foreground mt-1">{ch.desc}</p>
@@ -186,7 +231,6 @@ export default function CampaignNew() {
             </div>
           </div>
 
-          {/* Template selector */}
           <div>
             <Label className="text-sm font-medium">Template (optional)</Label>
             <Select onValueChange={handleTemplateSelect} defaultValue="none">
@@ -195,51 +239,36 @@ export default function CampaignNew() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">No template</SelectItem>
-                {(templates ?? [])
-                  .filter((t) => t.channel === channel)
-                  .map((t) => (
-                    <SelectItem key={t.id} value={String(t.id)}>
-                      <span className="font-medium">{t.name}</span>
-                      <span className="text-muted-foreground ml-2 text-xs capitalize">({t.category})</span>
-                    </SelectItem>
-                  ))}
+                {(templates ?? []).filter((t) => t.channel === channel).map((t) => (
+                  <SelectItem key={t.id} value={String(t.id)}>
+                    <span className="font-medium">{t.name}</span>
+                    <span className="text-muted-foreground ml-2 text-xs capitalize">({t.category})</span>
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
 
-          {/* Message body */}
-          <FormField
-            control={form.control}
-            name="body"
-            render={({ field }) => (
-              <FormItem>
-                <div className="flex items-center justify-between">
-                  <FormLabel>Message</FormLabel>
-                  {channel === "sms" && body.length > 0 && (
-                    <span className="text-xs text-muted-foreground">
-                      {chars} chars · {segments} SMS segment{segments !== 1 ? "s" : ""}
-                    </span>
-                  )}
-                </div>
-                <FormControl>
-                  <Textarea
-                    placeholder="Type your message... Use {{name}}, {{amount}}, {{date}} for personalisation."
-                    rows={5}
-                    data-testid="input-message-body"
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-                {channel === "sms" && chars > 160 && (
-                  <p className="text-xs text-amber-600">
-                    Messages over 160 characters count as multiple SMS and cost more.
-                  </p>
+          <FormField control={form.control} name="body" render={({ field }) => (
+            <FormItem>
+              <div className="flex items-center justify-between">
+                <FormLabel>Message</FormLabel>
+                {channel === "sms" && body.length > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    {chars} chars · {segments} SMS segment{segments !== 1 ? "s" : ""}
+                  </span>
                 )}
-              </FormItem>
-            )}
-          />
+              </div>
+              <FormControl>
+                <Textarea placeholder="Type your message... Use {{name}}, {{amount}}, {{date}} for personalisation." rows={5} data-testid="input-message-body" {...field} />
+              </FormControl>
+              <FormMessage />
+              {channel === "sms" && chars > 160 && (
+                <p className="text-xs text-amber-600">Messages over 160 characters count as multiple SMS and cost more.</p>
+              )}
+            </FormItem>
+          )} />
 
-          {/* Groups */}
           <div>
             <Label className="text-sm font-medium">Send To (Groups)</Label>
             <p className="text-xs text-muted-foreground mb-2 mt-0.5">Select one or more contact groups</p>
@@ -250,61 +279,34 @@ export default function CampaignNew() {
             ) : (
               <div className="flex flex-wrap gap-2">
                 {groups.map((g) => (
-                  <button
-                    key={g.id}
-                    type="button"
-                    data-testid={`group-toggle-${g.id}`}
-                    onClick={() => toggleGroup(g.id)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm transition-colors ${
-                      selectedGroupIds.includes(g.id)
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "border-border hover:border-muted-foreground/40"
-                    }`}
+                  <button key={g.id} type="button" data-testid={`group-toggle-${g.id}`} onClick={() => toggleGroup(g.id)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm transition-colors ${selectedGroupIds.includes(g.id) ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-muted-foreground/40"}`}
                   >
                     {g.name}
-                    <span className={`text-xs ${selectedGroupIds.includes(g.id) ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
-                      {g.contactCount}
-                    </span>
+                    <span className={`text-xs ${selectedGroupIds.includes(g.id) ? "text-primary-foreground/70" : "text-muted-foreground"}`}>{g.contactCount}</span>
                   </button>
                 ))}
               </div>
             )}
           </div>
 
-          {/* Schedule */}
-          <FormField
-            control={form.control}
-            name="scheduledAt"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Schedule (optional)</FormLabel>
-                <FormControl>
-                  <Input type="datetime-local" data-testid="input-scheduled-at" {...field} />
-                </FormControl>
-                <p className="text-xs text-muted-foreground">Leave blank to save as draft or send immediately.</p>
-              </FormItem>
-            )}
-          />
+          <FormField control={form.control} name="scheduledAt" render={({ field }) => (
+            <FormItem>
+              <FormLabel>Schedule (optional)</FormLabel>
+              <FormControl><Input type="datetime-local" data-testid="input-scheduled-at" {...field} /></FormControl>
+              <p className="text-xs text-muted-foreground">Leave blank to save as draft or send immediately.</p>
+            </FormItem>
+          )} />
 
-          {/* Actions */}
           <div className="flex gap-3 pt-2">
-            <Button
-              type="submit"
-              variant="outline"
-              disabled={createCampaign.isPending}
-              data-testid="button-save-draft"
-            >
-              Save as Draft
+            <Button type="submit" variant="outline" disabled={submitting} data-testid="button-save-draft">
+              {editId ? "Save Changes" : "Save as Draft"}
             </Button>
-            <Button
-              type="button"
-              disabled={createCampaign.isPending}
-              data-testid="button-send-now"
-              onClick={form.handleSubmit((v) => onSubmit(v, true))}
-              className="gap-2"
+            <Button type="button" disabled={submitting} data-testid="button-send-now"
+              onClick={form.handleSubmit((v) => onSubmit(v, true))} className="gap-2"
             >
               <Send className="w-4 h-4" />
-              Send Now
+              {submitting ? "Sending…" : "Send Now"}
             </Button>
           </div>
         </form>
